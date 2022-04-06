@@ -1,8 +1,4 @@
 // Utils
-function rand(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
 function now() {
     return 'performance' in window ? performance.now() : Date.now();
 }
@@ -326,6 +322,12 @@ class Shader {
 
 
 
+const stats = new Stats();
+stats.dom.style.top = '';
+stats.dom.style.left = '';
+stats.dom.style.right = '16px';
+stats.dom.style.bottom = '16px';
+document.body.appendChild(stats.dom);
 
 
 
@@ -336,57 +338,153 @@ class Shader {
 
 // Game
 
-const textures = [
-    { id: 1, name: 'Grass', image: '/images/grass.jpg', transparent: false },
-    { id: 2, name: 'Tree 1', image: '/images/tree1.png', transparent: true },
-    { id: 3, name: 'Tree 2', image: '/images/tree2.png', transparent: true },
-    { id: 4, name: 'Tree 3', image: '/images/tree3.png', transparent: true },
-    { id: 5, name: 'Bushes', image: '/images/bushes.png', transparent: true },
-    { id: 6, name: 'Rose', image: '/images/rose.png', transparent: true },
-    { id: 7, name: 'Sunflower', image: '/images/sunflower.png', transparent: true }
-];
-let texturesLoading = textures.length;
-function loadTextures(gl) {
-    textures.forEach(texture => {
-        const image = new Image();
-        image.src = texture.image;
-        image.onload = () => {
-            texture.texture = gl.createTexture();
-            gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-            gl.texImage2D(gl.TEXTURE_2D, 0, texture.transparent ? gl.RGBA : gl.RGB, texture.transparent ? gl.RGBA : gl.RGB, gl.UNSIGNED_BYTE, image);
-            gl.generateMipmap(gl.TEXTURE_2D);
-            texturesLoading--;
-            if (texturesLoading == 0) {
-                console.log('Loading images done!');
-            }
-        };
-    });
+// Constants
+const MessageType = {
+    WORLD_INFO: 1,
+    WORLD_CHUNK: 2
+};
+
+const ObjectType = {
+    SPRITE: 1,
+    PLANE: 2
+};
+
+let CHUNK_SIZE = 64;
+
+// World
+let textures = [];
+let textureLookup = {};
+
+let objects = [];
+let objectLookup = {};
+
+const world = {
+    chunks: [],
+    instances: []
+};
+
+
+let gl = undefined;
+
+// Websocket connection
+const ws = new WebSocket('ws://localhost:8080/ws');
+ws.binaryType = 'arrayview';
+
+function requestChunk(ws, x, y) {
+    const message = new ArrayBuffer(1 + 4 * 2);
+    const messageView = new DataView(message);
+    let pos = 0;
+    messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
+    messageView.setInt32(pos, x, true); pos += 4;
+    messageView.setInt32(pos, y, true); pos += 4;
+    ws.send(message);
 }
 
-const objects = [
-    { id: 1, name: 'Tree 1', width: 9, height: 10, depth: 0, texture_id: 2, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 2, name: 'Tree 2', width: 8, height: 8, depth: 0, texture_id: 3, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 3, name: 'Tree 3', width: 11, height: 12, depth: 0, texture_id: 4, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 4, name: 'Bushes', width: 3, height: 3, depth: 0, texture_id: 5, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 5, name: 'Rose', width: 1, height: 1, depth: 0, texture_id: 6, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 6, name: 'Sun flower', width: 1, height: 1, depth: 0, texture_id: 7, texture_repeat_x: 1, texture_repeat_y: 1 }
-];
+ws.onopen = () => {
+    // Send world info message
+    const message = new ArrayBuffer(1);
+    const messageView = new DataView(message);
+    messageView.setUint8(0, MessageType.WORLD_INFO);
+    ws.send(message);
 
+    // Send world chunk message
+    for (let y = -5; y < 5; y++) {
+        for (let x = -5; x < 5; x++) {
+            requestChunk(ws, x, y);
+        }
+    }
+};
 
-const stats = new Stats();
-stats.dom.style.top = '';
-stats.dom.style.left = '';
-stats.dom.style.right = '16px';
-stats.dom.style.bottom = '16px';
-document.body.appendChild(stats.dom);
+ws.onmessage = async event => {
+    const messageView = new DataView(await event.data.arrayBuffer());
+
+    let pos = 0;
+    const type = messageView.getUint8(pos); pos += 1;
+
+    // Parse world info response message
+    if (type == MessageType.WORLD_INFO) {
+        const texturesLength = messageView.getUint32(pos, true); pos += 4;
+        textures = [];
+        textureLookup = {};
+        for (let i = 0; i < texturesLength; i++) {
+            const texture = {};
+            texture.id = messageView.getUint32(pos, true); pos += 4;
+            texture.transparent = messageView.getUint8(pos); pos += 1;
+            textures.push(texture);
+            textureLookup[texture.id] = texture;
+
+            const image = new Image();
+            image.crossOrigin = '';
+            image.src = 'http://localhost:8080/textures/' + texture.id;
+            image.onload = () => {
+                texture.texture = gl.createTexture();
+                gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                gl.texImage2D(gl.TEXTURE_2D, 0, texture.transparent ? gl.RGBA : gl.RGB, texture.transparent ? gl.RGBA : gl.RGB, gl.UNSIGNED_BYTE, image);
+                gl.generateMipmap(gl.TEXTURE_2D);
+            };
+        }
+        const objectsLength = messageView.getUint32(pos, true); pos += 4;
+        objects = [];
+        objectLookup = {};
+        for (let i = 0; i < objectsLength; i++) {
+            const object = {};
+            object.id = messageView.getUint32(pos, true); pos += 4;
+            object.type = messageView.getUint8(pos); pos += 1;
+            object.width = messageView.getFloat32(pos, true); pos += 4;
+            object.height = messageView.getFloat32(pos, true); pos += 4;
+            object.depth = messageView.getFloat32(pos, true); pos += 4;
+            object.texture_id = messageView.getUint32(pos, true); pos += 4;
+            object.texture_repeat_x = messageView.getUint16(pos, true); pos += 2;
+            object.texture_repeat_y = messageView.getUint16(pos, true); pos += 2;
+            objects.push(object);
+            objectLookup[object.id] = object;
+        }
+    }
+
+    // Parse world info response message
+    if (type == MessageType.WORLD_CHUNK) {
+        const chunk = {};
+        chunk.id = messageView.getUint32(pos, true); pos += 4;
+        chunk.x = messageView.getInt32(pos, true); pos += 4;
+        chunk.y = messageView.getInt32(pos, true); pos += 4;
+        world.chunks.push(chunk);
+
+        const instancesLength = messageView.getUint32(pos, true); pos += 4;
+        for (let i = 0; i < instancesLength; i++) {
+            const instance = {};
+            instance.id = messageView.getUint32(pos, true); pos += 4;
+            instance.chunk_id = chunk.id;
+            instance.object_id = messageView.getUint32(pos, true); pos += 4;
+            instance.position_x = messageView.getFloat32(pos, true); pos += 4;
+            instance.position_y = messageView.getFloat32(pos, true); pos += 4;
+            instance.position_z = messageView.getFloat32(pos, true); pos += 4;
+            instance.rotation_x = messageView.getFloat32(pos, true); pos += 4;
+            instance.rotation_y = messageView.getFloat32(pos, true); pos += 4;
+            instance.rotation_z = messageView.getFloat32(pos, true); pos += 4;
+            instance.scale_x = messageView.getFloat32(pos, true); pos += 4;
+            instance.scale_y = messageView.getFloat32(pos, true); pos += 4;
+            instance.scale_z = messageView.getFloat32(pos, true); pos += 4;
+            world.instances.push(instance);
+        }
+    }
+};
+
+const debug = document.getElementById('debug');
+function updateDebugText() {
+    // Update debug text
+    debug.textContent = `Camera: ${game.camera.position.x.toFixed(3)}x${game.camera.position.y.toFixed(3)}x${game.camera.position.z.toFixed(3)}
+        ${game.camera.rotation.x.toFixed(3)}x${game.camera.rotation.y.toFixed(3)}x${game.camera.rotation.z.toFixed(3)}
+        - Instances: ${world.instances.length}`;
+}
 
 
 class Game {
     constructor(id) {
         this.canvas = document.getElementById(id);
         this.gl = this.canvas.getContext('webgl');
+        gl = this.gl;
         this.vertexArrayExtension = this.gl.getExtension('OES_vertex_array_object');
         this.pixelRatio = document.pixelRatio || 1;
         window.addEventListener('resize', this.resize.bind(this));
@@ -406,8 +504,6 @@ class Game {
     }
 
     init(gl) {
-        loadTextures(gl);
-
         this.shader = new Shader(gl,
             `attribute vec4 a_position;
             attribute vec2 a_texture_position;
@@ -458,27 +554,10 @@ class Game {
         this.camera.position.y = 1.75;
         this.camera.position.z = 5;
         this.camera.updateMatrix();
-
-        // World
-        this.world = {};
-        this.world.width = 5000;
-        this.world.height = 5000;
-        this.world.instances = [];
-        for (let i = 0; i < 25000; i++) {
-            this.world.instances.push({
-                object_id: rand(1, 6),
-                position: new Vector4(
-                    rand(0, this.world.width) - this.world.width / 2,
-                    0,
-                    rand(0, this.world.height) - this.world.height / 2
-                )
-            });
-        }
     }
 
     update(delta) {
         const camera = this.camera;
-        const world = this.world;
         if (keys['w'] || keys['a'] || keys['d'] || keys['s'] || keys[' '] || keys['shift']) {
             const update = new Vector4();
             const moveSpeed = camera.position.y == 2 ? 20 : 75;
@@ -490,13 +569,10 @@ class Game {
             if (keys['shift']) update.y -= moveSpeed * delta;
             update.mul(Matrix4.rotateY(camera.rotation.y));
             camera.position.add(update);
-            if (camera.position.x < -world.width / 2) camera.position.x = -world.width / 2;
-            if (camera.position.x > world.width / 2) camera.position.x = world.width / 2;
             if (camera.position.y < 2) camera.position.y = 2;
-            if (camera.position.z < -world.height / 2) camera.position.z = -world.height / 2;
-            if (camera.position.z > world.height / 2) camera.position.z = world.height / 2;
             camera.updateMatrix();
         }
+        updateDebugText();
     }
 
     render(gl) {
@@ -512,59 +588,51 @@ class Game {
         // Select plane vertex stuff
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
 
-        // Draw ground
-
-        // Calculate and set matrix
-        const ground = new Object3D();
-        ground.rotation.x = -Math.PI / 2;
-        ground.scale.x = this.world.width;
-        ground.scale.y = this.world.height;
-        ground.updateMatrix();
-        gl.uniformMatrix4fv(this.matrixUnfiformLocation, false, ground.matrix.elements);
-
-        // Select texture
-        gl.activeTexture(gl.TEXTURE0);
-        const grassTexture = textures.find(texture => texture.name == 'Grass');
-        gl.bindTexture(gl.TEXTURE_2D, grassTexture.texture);
-
-        // Set texture repeat
-        gl.uniform2f(this.textureRepeatUniformLocation, this.world.width, this.world.height);
-
-        // Draw!
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-
-
 
         // Sort instances
-        this.world.instances.sort((a, b) => {
-            return this.camera.position.distFlat(b.position) - this.camera.position.distFlat(a.position);
+        world.instances.sort((a, b) => {
+            return this.camera.position.distFlat(new Vector4(b.position_x, b.position_y, b.position_z)) -
+                this.camera.position.distFlat(new Vector4(a.position_x, a.position_y, a.position_z));
+        });
+        world.instances.sort((a, b) => {
+            return a.position_y - b.position_y;
         });
 
-        // Draw instances
+        // Draw world instances
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-        for (const instance of this.world.instances) {
-            if (this.camera.position.distFlat(instance.position) > 500) {
+        for (const instance of world.instances) {
+            if (this.camera.position.distFlat(new Vector4(instance.position_x, instance.position_y, instance.position_z)) > 500) {
                 continue;
             }
 
-            const object = objects.find(object => object.id == instance.object_id);
+            const object = objectLookup[instance.object_id];
 
             const tree = new Object3D();
-            tree.scale.x = object.width;
-            tree.scale.y = object.height;
-            tree.rotation.y = Math.atan2(this.camera.position.x - instance.position.x, this.camera.position.z - instance.position.z);
-            tree.position.x = instance.position.x;
-            tree.position.y = instance.position.y + object.height / 2;
-            tree.position.z = instance.position.z;
+            tree.position.x = instance.position_x;
+            tree.position.y = instance.position_y + object.height / 2;
+            tree.position.z = instance.position_z;
+
+            tree.rotation.x = instance.rotation_x;
+            if (object.type == ObjectType.SPRITE) {
+                tree.rotation.y = Math.atan2(this.camera.position.x - instance.position_x, this.camera.position.z - instance.position_z);
+            } else {
+                tree.rotation.y = instance.rotation_y;
+            }
+            tree.rotation.z = instance.rotation_z;
+
+            tree.scale.x = object.width * instance.scale_x;
+            tree.scale.y = object.height * instance.scale_y;
+            tree.scale.z = object.depth * instance.scale_z;
 
             tree.updateMatrix();
             gl.uniformMatrix4fv(this.matrixUnfiformLocation, false, tree.matrix.elements);
 
             // Select texture
-            gl.activeTexture(gl.TEXTURE0);
-            const tree1Texture = textures.find(texture => texture.id == object.texture_id);
-            gl.bindTexture(gl.TEXTURE_2D, tree1Texture.texture);
+            if (textureLookup[object.texture_id].texture != undefined) {
+                gl.activeTexture(gl.TEXTURE0);
+                gl.bindTexture(gl.TEXTURE_2D, textureLookup[object.texture_id].texture);
+            }
 
             // Set texture repeat
             gl.uniform2f(this.textureRepeatUniformLocation, object.texture_repeat_x, object.texture_repeat_y);
@@ -618,7 +686,6 @@ window.addEventListener('mousemove', event => {
         pitch -= event.movementY * 0.004;
         if (pitch > radians(90)) pitch = radians(90);
         if (pitch < -radians(90)) pitch = -radians(90);
-
         game.camera.rotation.x = -pitch;
         game.camera.rotation.y = -yaw;
         game.camera.updateMatrix();
@@ -630,3 +697,4 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 game.start();
+updateDebugText();
