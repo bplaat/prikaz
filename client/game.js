@@ -344,6 +344,7 @@ const ObjectType = {
 
 const RENDER_DIST = 250;
 const CHUNK_SIZE = 16;
+const INSTANCE_BUFFER_SIZE = 2048;
 const CHUNK_FETCH_RANGE = RENDER_DIST / CHUNK_SIZE;
 
 // World
@@ -468,7 +469,7 @@ function updateDebugText() {
     debug.textContent = `Camera: ${game.camera.position.x.toFixed(3)}x${game.camera.position.y.toFixed(3)}x${game.camera.position.z.toFixed(3)}
         ${game.camera.rotation.x.toFixed(3)}x${game.camera.rotation.y.toFixed(3)}x${game.camera.rotation.z.toFixed(3)} -
         Chunk: ${Math.floor(game.camera.position.x / CHUNK_SIZE)}x${Math.floor(game.camera.position.z / CHUNK_SIZE)}
-        - Chunks: ${world.chunks.length} - Instances: ${world.instances.length}`;
+        - Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Draws: ${game.drawCount}`;
 }
 
 
@@ -478,6 +479,7 @@ class Game {
         this.gl = this.canvas.getContext('webgl');
         gl = this.gl;
         this.vertexArrayExtension = this.gl.getExtension('OES_vertex_array_object');
+        this.instancedArraysExtension = this.gl.getExtension('ANGLE_instanced_arrays');
         this.pixelRatio = document.pixelRatio || 1;
         window.addEventListener('resize', this.resize.bind(this));
         this.resize();
@@ -499,32 +501,53 @@ class Game {
         this.shader = new Shader(gl,
             `attribute vec4 a_position;
             attribute vec2 a_texture_position;
-            uniform mat4 u_matrix;
+            attribute mat4 a_matrix;
+            attribute float a_texture_index;
+            attribute vec2 a_texture_repeat;
+
             uniform mat4 u_camera;
-            uniform vec2 u_texture_repeat;
+
+            varying float v_texture_index;
             varying vec2 v_texture_position;
+
             void main() {
-                gl_Position = u_camera * u_matrix * a_position;
-                v_texture_position = a_texture_position * u_texture_repeat;
+                gl_Position = u_camera * a_matrix * a_position;
+                v_texture_index = a_texture_index;
+                v_texture_position = a_texture_position * a_texture_repeat;
             }`,
 
             `precision mediump float;
-            uniform sampler2D u_texture;
+
+            uniform sampler2D u_texture[8];
+
+            varying float v_texture_index;
             varying vec2 v_texture_position;
+
             void main() {
-                gl_FragColor = texture2D(u_texture, v_texture_position);
+                if (v_texture_index == 0.0) gl_FragColor = texture2D(u_texture[0], v_texture_position);
+                else if (v_texture_index == 1.0) gl_FragColor = texture2D(u_texture[1], v_texture_position);
+                else if (v_texture_index == 2.0) gl_FragColor = texture2D(u_texture[2], v_texture_position);
+                else if (v_texture_index == 3.0) gl_FragColor = texture2D(u_texture[3], v_texture_position);
+                else if (v_texture_index == 4.0) gl_FragColor = texture2D(u_texture[4], v_texture_position);
+                else if (v_texture_index == 5.0) gl_FragColor = texture2D(u_texture[5], v_texture_position);
+                else if (v_texture_index == 6.0) gl_FragColor = texture2D(u_texture[6], v_texture_position);
+                else if (v_texture_index == 7.0) gl_FragColor = texture2D(u_texture[7], v_texture_position);
+                else gl_FragColor = vec4(0, 0, 0, 1);
             }`
         );
         this.positionAttributeLocation = this.shader.getAttribLocation('a_position');
         this.texturePositionAttributeLocation = this.shader.getAttribLocation('a_texture_position');
-        this.matrixUnfiformLocation = this.shader.getUniformLocation('u_matrix');
-        this.cameraUnfiformLocation = this.shader.getUniformLocation('u_camera');
-        this.textureRepeatUniformLocation = this.shader.getUniformLocation('u_texture_repeat');
+        this.matrixAttributeLocation = this.shader.getAttribLocation('a_matrix');
+        this.textureIndexAttributeLocation = this.shader.getAttribLocation('a_texture_index');
+        this.textureRepeatAttributeLocation = this.shader.getAttribLocation('a_texture_repeat');
+        this.cameraUniformLocation = this.shader.getUniformLocation('u_camera');
         this.textureUniformLocation = this.shader.getUniformLocation('u_texture');
 
+        // Plane vao
         this.planeVertexArray = this.vertexArrayExtension.createVertexArrayOES();
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
 
+        // Plane buffer
         const planeBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -542,11 +565,28 @@ class Game {
         gl.enableVertexAttribArray(this.texturePositionAttributeLocation);
         gl.vertexAttribPointer(this.texturePositionAttributeLocation, 2, gl.FLOAT, false, 5 * 4, 3 * 4);
 
+        // Instance buffer
+        this.instanceBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, INSTANCE_BUFFER_SIZE * 19 * 4, gl.DYNAMIC_DRAW);
+        for (let i = 0; i < 4; i++) {
+            const location = this.matrixAttributeLocation + i;
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 19 * 4, i * 4 * 4);
+            this.instancedArraysExtension.vertexAttribDivisorANGLE(location, 1);
+        }
+        gl.enableVertexAttribArray(this.textureIndexAttributeLocation);
+        gl.vertexAttribPointer(this.textureIndexAttributeLocation, 1, gl.FLOAT, false, 19 * 4, 16 * 4);
+        this.instancedArraysExtension.vertexAttribDivisorANGLE(this.textureIndexAttributeLocation, 1);
+        gl.enableVertexAttribArray(this.textureRepeatAttributeLocation);
+        gl.vertexAttribPointer(this.textureRepeatAttributeLocation, 2, gl.FLOAT, false, 19 * 4, 17 * 4);
+        this.instancedArraysExtension.vertexAttribDivisorANGLE(this.textureRepeatAttributeLocation, 1);
+
+        // Camera
         this.camera = new PerspectiveCamera(radians(75), this.canvas.width / this.canvas.height, 0.1, 10000);
         this.camera.position.y = 1.75;
         this.camera.position.z = 5;
         this.camera.updateMatrix();
-
         updateDebugText();
     }
 
@@ -581,14 +621,19 @@ class Game {
     }
 
     render(gl) {
+        this.drawCount = 0;
+
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
         gl.clearColor(146 / 255, 226 / 255, 251 / 255, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // Use default shader and set camera matrix
         this.shader.use();
-        gl.uniformMatrix4fv(this.cameraUnfiformLocation, false, this.camera.matrix.elements);
+        gl.uniformMatrix4fv(this.cameraUniformLocation, false, this.camera.matrix.elements);
         gl.enable(gl.DEPTH_TEST);
+
+        // Set textures to first 8 texture unit
+        gl.uniform1iv(this.textureUniformLocation, [0, 1, 2, 3, 4, 5, 6, 7]);
 
         // Select plane vertex stuff
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
@@ -612,37 +657,39 @@ class Game {
 
             const object = objectLookup[instance.object_id];
 
-            const tree = new Object3D();
-            tree.position.x = instance.position_x;
-            tree.position.y = instance.position_y + object.height / 2;
-            tree.position.z = instance.position_z;
+            const object3d = new Object3D();
+            object3d.position.x = instance.position_x;
+            object3d.position.y = instance.position_y + object.height / 2;
+            object3d.position.z = instance.position_z;
 
-            tree.rotation.x = instance.rotation_x;
+            object3d.rotation.x = instance.rotation_x;
             if (object.type == ObjectType.SPRITE) {
-                tree.rotation.y = Math.atan2(this.camera.position.x - instance.position_x, this.camera.position.z - instance.position_z);
+                object3d.rotation.y = Math.atan2(this.camera.position.x - instance.position_x, this.camera.position.z - instance.position_z);
             } else {
-                tree.rotation.y = instance.rotation_y;
+                object3d.rotation.y = instance.rotation_y;
             }
-            tree.rotation.z = instance.rotation_z;
+            object3d.rotation.z = instance.rotation_z;
 
-            tree.scale.x = object.width * instance.scale_x;
-            tree.scale.y = object.height * instance.scale_y;
-            tree.scale.z = object.depth * instance.scale_z;
+            object3d.scale.x = object.width * instance.scale_x;
+            object3d.scale.y = object.height * instance.scale_y;
+            object3d.scale.z = object.depth * instance.scale_z;
 
-            tree.updateMatrix();
-            gl.uniformMatrix4fv(this.matrixUnfiformLocation, false, tree.matrix.elements);
+            object3d.updateMatrix();
+
+            // Set matrix and texture repeat
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+            gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(object3d.matrix.elements));
+            gl.bufferSubData(gl.ARRAY_BUFFER, 16 * 4, new Float32Array([ 2, object.texture_repeat_x, object.texture_repeat_y ]));
 
             // Select texture
             if (textureLookup[object.texture_id].texture != undefined) {
-                gl.activeTexture(gl.TEXTURE0);
+                gl.activeTexture(gl.TEXTURE2);
                 gl.bindTexture(gl.TEXTURE_2D, textureLookup[object.texture_id].texture);
             }
 
-            // Set texture repeat
-            gl.uniform2f(this.textureRepeatUniformLocation, object.texture_repeat_x, object.texture_repeat_y);
-
             // Draw!
-            gl.drawArrays(gl.TRIANGLES, 0, 6);
+            this.instancedArraysExtension.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 6, 1);
+            this.drawCount++;
         }
 
         gl.disable(gl.BLEND);
