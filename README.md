@@ -2,6 +2,6 @@
 A WebGL game experiment
 
 ## Todo list
-- Load chunks in when walking
-- Instanced drawing
+- Instanced drawing / effecient z sorting
 - Cleanup client code in an object-oriented way
+- Sprint blending border artifacts

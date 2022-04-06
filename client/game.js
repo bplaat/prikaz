@@ -315,20 +315,13 @@ class Shader {
 
 
 
-
-
-
-
-
-
-
+// Stats
 const stats = new Stats();
 stats.dom.style.top = '';
 stats.dom.style.left = '';
 stats.dom.style.right = '16px';
 stats.dom.style.bottom = '16px';
 document.body.appendChild(stats.dom);
-
 
 
 
@@ -349,7 +342,9 @@ const ObjectType = {
     PLANE: 2
 };
 
-let CHUNK_SIZE = 64;
+const RENDER_DIST = 250;
+const CHUNK_SIZE = 16;
+const CHUNK_FETCH_RANGE = RENDER_DIST / CHUNK_SIZE;
 
 // World
 let textures = [];
@@ -360,6 +355,7 @@ let objectLookup = {};
 
 const world = {
     chunks: [],
+    requestChunks: [],
     instances: []
 };
 
@@ -370,13 +366,13 @@ let gl = undefined;
 const ws = new WebSocket('ws://localhost:8080/ws');
 ws.binaryType = 'arrayview';
 
-function requestChunk(ws, x, y) {
+function requestChunk(x, y) {
     const message = new ArrayBuffer(1 + 4 * 2);
     const messageView = new DataView(message);
     let pos = 0;
     messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
     messageView.setInt32(pos, x, true); pos += 4;
-    messageView.setInt32(pos, y, true); pos += 4;
+    messageView.setInt32(pos, y, true);
     ws.send(message);
 }
 
@@ -387,12 +383,7 @@ ws.onopen = () => {
     messageView.setUint8(0, MessageType.WORLD_INFO);
     ws.send(message);
 
-    // Send world chunk message
-    for (let y = -5; y < 5; y++) {
-        for (let x = -5; x < 5; x++) {
-            requestChunk(ws, x, y);
-        }
-    }
+    game.start();
 };
 
 ws.onmessage = async event => {
@@ -475,8 +466,9 @@ const debug = document.getElementById('debug');
 function updateDebugText() {
     // Update debug text
     debug.textContent = `Camera: ${game.camera.position.x.toFixed(3)}x${game.camera.position.y.toFixed(3)}x${game.camera.position.z.toFixed(3)}
-        ${game.camera.rotation.x.toFixed(3)}x${game.camera.rotation.y.toFixed(3)}x${game.camera.rotation.z.toFixed(3)}
-        - Instances: ${world.instances.length}`;
+        ${game.camera.rotation.x.toFixed(3)}x${game.camera.rotation.y.toFixed(3)}x${game.camera.rotation.z.toFixed(3)} -
+        Chunk: ${Math.floor(game.camera.position.x / CHUNK_SIZE)}x${Math.floor(game.camera.position.z / CHUNK_SIZE)}
+        - Chunks: ${world.chunks.length} - Instances: ${world.instances.length}`;
 }
 
 
@@ -554,6 +546,8 @@ class Game {
         this.camera.position.y = 1.75;
         this.camera.position.z = 5;
         this.camera.updateMatrix();
+
+        updateDebugText();
     }
 
     update(delta) {
@@ -573,6 +567,17 @@ class Game {
             camera.updateMatrix();
         }
         updateDebugText();
+
+        const cx = Math.floor(camera.position.x / CHUNK_SIZE);
+        const cy = Math.floor(camera.position.z / CHUNK_SIZE);
+        for (let y = cy - CHUNK_FETCH_RANGE; y <= cy + CHUNK_FETCH_RANGE; y++) {
+            for (let x = cx - CHUNK_FETCH_RANGE; x <= cx + CHUNK_FETCH_RANGE; x++) {
+                if (world.requestChunks.find(chunk => chunk.x == x && chunk.y == y) == null) {
+                    world.requestChunks.push({ x, y });
+                    requestChunk(x, y);
+                }
+            }
+        }
     }
 
     render(gl) {
@@ -588,8 +593,7 @@ class Game {
         // Select plane vertex stuff
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
 
-
-        // Sort instances
+        // Sort instances SLOW
         world.instances.sort((a, b) => {
             return this.camera.position.distFlat(new Vector4(b.position_x, b.position_y, b.position_z)) -
                 this.camera.position.distFlat(new Vector4(a.position_x, a.position_y, a.position_z));
@@ -602,7 +606,7 @@ class Game {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         for (const instance of world.instances) {
-            if (this.camera.position.distFlat(new Vector4(instance.position_x, instance.position_y, instance.position_z)) > 500) {
+            if (this.camera.position.distFlat(new Vector4(instance.position_x, instance.position_y, instance.position_z)) > RENDER_DIST) {
                 continue;
             }
 
@@ -661,8 +665,10 @@ class Game {
     }
 }
 
+// Game instance
 const game = new Game('canvas');
 
+// Keys stuff
 const keys = {};
 window.addEventListener('keydown', event => {
     keys[event.key.toLowerCase()] = true;
@@ -695,6 +701,3 @@ window.addEventListener('mousemove', event => {
 document.addEventListener('pointerlockchange', () => {
     pointerlock = document.pointerLockElement == canvas;
 });
-
-game.start();
-updateDebugText();
