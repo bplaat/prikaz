@@ -311,27 +311,15 @@ class Shader {
     }
 }
 
-
-
-
-
-// Stats
-const stats = new Stats();
-stats.dom.style.top = '';
-stats.dom.style.left = '';
-stats.dom.style.right = '16px';
-stats.dom.style.bottom = '16px';
-document.body.appendChild(stats.dom);
-
-
-
-
-
-
-
 // Game
 
 // Constants
+const RENDER_DIST = 300;
+const CHUNK_SIZE = 16;
+const INSTANCE_BUFFER_SIZE = 4096;
+const CHUNK_FETCH_RANGE = RENDER_DIST / CHUNK_SIZE;
+const CAMERA_SENSITIVITY = 0.004;
+
 const MessageType = {
     WORLD_INFO: 1,
     WORLD_CHUNK: 2
@@ -341,11 +329,6 @@ const ObjectType = {
     SPRITE: 1,
     PLANE: 2
 };
-
-const RENDER_DIST = 100;
-const CHUNK_SIZE = 16;
-const INSTANCE_BUFFER_SIZE = 4096;
-const CHUNK_FETCH_RANGE = RENDER_DIST / CHUNK_SIZE;
 
 // World
 let textures = [];
@@ -360,129 +343,121 @@ const world = {
     instances: []
 };
 
-
-let gl = undefined;
-
 // Websocket connection
-const ws = new WebSocket('ws://localhost:8080/ws');
-ws.binaryType = 'arraybuffer';
+class Connection {
+    constructor(gl, url) {
+        this.gl = gl;
+        this.ws = new WebSocket(url);
+        this.ws.binaryType = 'arraybuffer';
+        this.connected = false;
+        this.ws.onopen = this.onOpen.bind(this);
+        this.ws.onmessage = this.onMessage.bind(this);
+    }
 
-function requestChunk(x, y) {
-    const message = new ArrayBuffer(1 + 4 * 2);
-    const messageView = new DataView(message);
-    let pos = 0;
-    messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
-    messageView.setInt32(pos, x, true); pos += 4;
-    messageView.setInt32(pos, y, true);
-    ws.send(message);
-}
+    onOpen() {
+        this.connected = true;
+        this.sendWorldInfoMessage();
+    }
 
-ws.onopen = () => {
-    // Send world info message
-    const message = new ArrayBuffer(1);
-    const messageView = new DataView(message);
-    messageView.setUint8(0, MessageType.WORLD_INFO);
-    ws.send(message);
+    onMessage(event) {
+        const messageView = new DataView(event.data);
 
-    game.start();
+        let pos = 0;
+        const type = messageView.getUint8(pos); pos += 1;
 
-    requestChunk(0, 0);
-    requestChunk(1, 0);
-    requestChunk(0, 1);
-    requestChunk(1, 1);
-};
+        // Parse world info response message
+        if (type == MessageType.WORLD_INFO) {
+            const texturesLength = messageView.getUint32(pos, true); pos += 4;
+            textures = [];
+            textureLookup = {};
+            for (let i = 0; i < texturesLength; i++) {
+                const texture = {};
+                texture.id = messageView.getUint32(pos, true); pos += 4;
+                texture.transparent = messageView.getUint8(pos); pos += 1;
+                textures.push(texture);
+                textureLookup[texture.id] = texture;
 
-ws.onmessage = async event => {
-    const messageView = new DataView(event.data);
-
-    let pos = 0;
-    const type = messageView.getUint8(pos); pos += 1;
-
-    // Parse world info response message
-    if (type == MessageType.WORLD_INFO) {
-        const texturesLength = messageView.getUint32(pos, true); pos += 4;
-        textures = [];
-        textureLookup = {};
-        for (let i = 0; i < texturesLength; i++) {
-            const texture = {};
-            texture.id = messageView.getUint32(pos, true); pos += 4;
-            texture.transparent = messageView.getUint8(pos); pos += 1;
-            textures.push(texture);
-            textureLookup[texture.id] = texture;
-
-            const image = new Image();
-            image.crossOrigin = '';
-            image.src = 'http://localhost:8080/textures/' + texture.id;
-            image.onload = () => {
-                texture.texture = gl.createTexture();
-                gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
-                gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-                gl.texImage2D(gl.TEXTURE_2D, 0, texture.transparent ? gl.RGBA : gl.RGB, texture.transparent ? gl.RGBA : gl.RGB, gl.UNSIGNED_BYTE, image);
-                gl.generateMipmap(gl.TEXTURE_2D);
-            };
+                const image = new Image();
+                image.crossOrigin = '';
+                image.src = 'http://localhost:8080/textures/' + texture.id;
+                image.onload = () => {
+                    const gl = this.gl;
+                    texture.texture = gl.createTexture();
+                    gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+                    gl.texImage2D(gl.TEXTURE_2D, 0, texture.transparent ? gl.RGBA : gl.RGB, texture.transparent ? gl.RGBA : gl.RGB, gl.UNSIGNED_BYTE, image);
+                    gl.generateMipmap(gl.TEXTURE_2D);
+                };
+            }
+            const objectsLength = messageView.getUint32(pos, true); pos += 4;
+            objects = [];
+            objectLookup = {};
+            for (let i = 0; i < objectsLength; i++) {
+                const object = {};
+                object.id = messageView.getUint32(pos, true); pos += 4;
+                object.type = messageView.getUint8(pos); pos += 1;
+                object.width = messageView.getFloat32(pos, true); pos += 4;
+                object.height = messageView.getFloat32(pos, true); pos += 4;
+                object.depth = messageView.getFloat32(pos, true); pos += 4;
+                object.texture_id = messageView.getUint32(pos, true); pos += 4;
+                object.texture_repeat_x = messageView.getUint16(pos, true); pos += 2;
+                object.texture_repeat_y = messageView.getUint16(pos, true); pos += 2;
+                objects.push(object);
+                objectLookup[object.id] = object;
+            }
         }
-        const objectsLength = messageView.getUint32(pos, true); pos += 4;
-        objects = [];
-        objectLookup = {};
-        for (let i = 0; i < objectsLength; i++) {
-            const object = {};
-            object.id = messageView.getUint32(pos, true); pos += 4;
-            object.type = messageView.getUint8(pos); pos += 1;
-            object.width = messageView.getFloat32(pos, true); pos += 4;
-            object.height = messageView.getFloat32(pos, true); pos += 4;
-            object.depth = messageView.getFloat32(pos, true); pos += 4;
-            object.texture_id = messageView.getUint32(pos, true); pos += 4;
-            object.texture_repeat_x = messageView.getUint16(pos, true); pos += 2;
-            object.texture_repeat_y = messageView.getUint16(pos, true); pos += 2;
-            objects.push(object);
-            objectLookup[object.id] = object;
+
+        // Parse world info response message
+        if (type == MessageType.WORLD_CHUNK) {
+            const chunk = {};
+            chunk.id = messageView.getUint32(pos, true); pos += 4;
+            chunk.x = messageView.getInt32(pos, true); pos += 4;
+            chunk.y = messageView.getInt32(pos, true); pos += 4;
+            world.chunks.push(chunk);
+
+            const instancesLength = messageView.getUint32(pos, true); pos += 4;
+            for (let i = 0; i < instancesLength; i++) {
+                const instance = {};
+                instance.id = messageView.getUint32(pos, true); pos += 4;
+                instance.chunk_id = chunk.id;
+                instance.object_id = messageView.getUint32(pos, true); pos += 4;
+                instance.position_x = messageView.getFloat32(pos, true); pos += 4;
+                instance.position_y = messageView.getFloat32(pos, true); pos += 4;
+                instance.position_z = messageView.getFloat32(pos, true); pos += 4;
+                instance.rotation_x = messageView.getFloat32(pos, true); pos += 4;
+                instance.rotation_y = messageView.getFloat32(pos, true); pos += 4;
+                instance.rotation_z = messageView.getFloat32(pos, true); pos += 4;
+                instance.scale_x = messageView.getFloat32(pos, true); pos += 4;
+                instance.scale_y = messageView.getFloat32(pos, true); pos += 4;
+                instance.scale_z = messageView.getFloat32(pos, true); pos += 4;
+                world.instances.push(instance);
+            }
         }
     }
 
-    // Parse world info response message
-    if (type == MessageType.WORLD_CHUNK) {
-        const chunk = {};
-        chunk.id = messageView.getUint32(pos, true); pos += 4;
-        chunk.x = messageView.getInt32(pos, true); pos += 4;
-        chunk.y = messageView.getInt32(pos, true); pos += 4;
-        world.chunks.push(chunk);
-
-        const instancesLength = messageView.getUint32(pos, true); pos += 4;
-        for (let i = 0; i < instancesLength; i++) {
-            const instance = {};
-            instance.id = messageView.getUint32(pos, true); pos += 4;
-            instance.chunk_id = chunk.id;
-            instance.object_id = messageView.getUint32(pos, true); pos += 4;
-            instance.position_x = messageView.getFloat32(pos, true); pos += 4;
-            instance.position_y = messageView.getFloat32(pos, true); pos += 4;
-            instance.position_z = messageView.getFloat32(pos, true); pos += 4;
-            instance.rotation_x = messageView.getFloat32(pos, true); pos += 4;
-            instance.rotation_y = messageView.getFloat32(pos, true); pos += 4;
-            instance.rotation_z = messageView.getFloat32(pos, true); pos += 4;
-            instance.scale_x = messageView.getFloat32(pos, true); pos += 4;
-            instance.scale_y = messageView.getFloat32(pos, true); pos += 4;
-            instance.scale_z = messageView.getFloat32(pos, true); pos += 4;
-            world.instances.push(instance);
-        }
+    sendWorldInfoMessage() {
+        const message = new ArrayBuffer(1);
+        const messageView = new DataView(message);
+        messageView.setUint8(0, MessageType.WORLD_INFO);
+        this.ws.send(message);
     }
-};
 
-const debug = document.getElementById('debug');
-function updateDebugText() {
-    // Update debug text
-    debug.textContent = `Camera: ${game.camera.position.x.toFixed(3)}x${game.camera.position.y.toFixed(3)}x${game.camera.position.z.toFixed(3)}
-        ${game.camera.rotation.x.toFixed(3)}x${game.camera.rotation.y.toFixed(3)}x${game.camera.rotation.z.toFixed(3)} -
-        Chunk: ${Math.floor(game.camera.position.x / CHUNK_SIZE)}x${Math.floor(game.camera.position.z / CHUNK_SIZE)}
-        - Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Draws: ${game.itemCount} / ${game.drawCount}`;
+    sendWorldChunkMessage(x, y) {
+        const message = new ArrayBuffer(1 + 4 * 2);
+        const messageView = new DataView(message);
+        let pos = 0;
+        messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
+        messageView.setInt32(pos, x, true); pos += 4;
+        messageView.setInt32(pos, y, true);
+        this.ws.send(message);
+    }
 }
-
 
 class Game {
-    constructor(id) {
-        this.canvas = document.getElementById(id);
+    constructor() {
+        this.canvas = document.getElementById('canvas');
         this.gl = this.canvas.getContext('webgl');
-        gl = this.gl;
         this.vertexArrayExtension = this.gl.getExtension('OES_vertex_array_object');
         this.instancedArraysExtension = this.gl.getExtension('ANGLE_instanced_arrays');
         this.pixelRatio = document.pixelRatio || 1;
@@ -503,6 +478,10 @@ class Game {
     }
 
     init(gl) {
+        // Connect to the server
+        this.con = new Connection(gl, 'ws://localhost:8080/ws');
+
+        // Create default instance drawing shader
         this.shader = new Shader(gl,
             `attribute vec4 a_position;
             attribute vec2 a_texture_position;
@@ -553,8 +532,8 @@ class Game {
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
 
         // Plane buffer
-        const planeBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, planeBuffer);
+        this.planeBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.planeBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
             // Vertex position, Texture position
             -0.5, -0.5, -0.5,   0, 1,
@@ -592,34 +571,95 @@ class Game {
         this.camera.position.y = 1.75;
         this.camera.position.z = 5;
         this.camera.updateMatrix();
-        updateDebugText();
+
+        // Debug label
+        this.debugLabel = document.getElementById('debug');
+
+        // Stats
+        this.stats = new Stats();
+        this.stats.dom.style.top = '';
+        this.stats.dom.style.left = '';
+        this.stats.dom.style.right = '16px';
+        this.stats.dom.style.bottom = '16px';
+        document.body.appendChild(this.stats.dom);
+
+        // Keyboard controls
+        this.keys = {};
+        window.addEventListener('keydown', this.keydown.bind(this));
+        window.addEventListener('keyup', this.keyup.bind(this));
+
+        // Mouse controls
+        this.mouse = {
+            pointerlock: false,
+            yaw: 0,
+            pitch: 0
+        };
+        window.addEventListener('mousedown', this.mousedown.bind(this));
+        window.addEventListener('mousemove', this.mousemove.bind(this));
+        document.addEventListener('pointerlockchange', this.pointerlockchange.bind(this));
+    }
+
+    keydown(event) {
+        this.keys[event.key.toLowerCase()] = true;
+    }
+
+    keyup(event) {
+        this.keys[event.key.toLowerCase()] = false;
+    }
+
+    mousedown() {
+        this.canvas.requestPointerLock();
+    }
+
+    mousemove(event) {
+        if (this.mouse.pointerlock) {
+            this.mouse.yaw -= event.movementX * CAMERA_SENSITIVITY;
+            this.mouse.pitch -= event.movementY * CAMERA_SENSITIVITY;
+            if (this.mouse.pitch > radians(90)) this.mouse.pitch = radians(90);
+            if (this.mouse.pitch < -radians(90)) this.mouse.pitch = -radians(90);
+            this.camera.rotation.x = -this.mouse.pitch;
+            this.camera.rotation.y = -this.mouse.yaw;
+            this.camera.updateMatrix();
+        }
+    }
+
+    pointerlockchange() {
+        this.mouse.pointerlock = document.pointerLockElement == this.canvas;
+    }
+
+    updateDebugLabel() {
+        this.debugLabel.textContent = `Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
+            ${this.camera.rotation.x.toFixed(3)}x${this.camera.rotation.y.toFixed(3)}x${this.camera.rotation.z.toFixed(3)} -
+            Chunk: ${Math.floor(this.camera.position.x / CHUNK_SIZE)}x${Math.floor(this.camera.position.z / CHUNK_SIZE)} -
+            Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Draws: ${this.itemCount} / ${this.drawCount}`;
     }
 
     update(delta) {
         const camera = this.camera;
-        if (keys['w'] || keys['a'] || keys['d'] || keys['s'] || keys[' '] || keys['shift']) {
+        if (this.keys['w'] || this.keys['a'] || this.keys['d'] || this.keys['s'] || this.keys[' '] || this.keys['shift']) {
             const update = new Vector4();
             const moveSpeed = camera.position.y == 2 ? 20 : 75;
-            if (keys['w']) update.z -= moveSpeed * delta;
-            if (keys['s']) update.z += moveSpeed * delta;
-            if (keys['a']) update.x -= moveSpeed * delta;
-            if (keys['d']) update.x += moveSpeed * delta;
-            if (keys[' ']) update.y += moveSpeed * delta;
-            if (keys['shift']) update.y -= moveSpeed * delta;
+            if (this.keys['w']) update.z -= moveSpeed * delta;
+            if (this.keys['s']) update.z += moveSpeed * delta;
+            if (this.keys['a']) update.x -= moveSpeed * delta;
+            if (this.keys['d']) update.x += moveSpeed * delta;
+            if (this.keys[' ']) update.y += moveSpeed * delta;
+            if (this.keys['shift']) update.y -= moveSpeed * delta;
             update.mul(Matrix4.rotateY(camera.rotation.y));
             camera.position.add(update);
             if (camera.position.y < 2) camera.position.y = 2;
             camera.updateMatrix();
         }
-        updateDebugText();
 
-        const cx = Math.floor(camera.position.x / CHUNK_SIZE);
-        const cy = Math.floor(camera.position.z / CHUNK_SIZE);
-        for (let y = cy - CHUNK_FETCH_RANGE; y <= cy + CHUNK_FETCH_RANGE; y++) {
-            for (let x = cx - CHUNK_FETCH_RANGE; x <= cx + CHUNK_FETCH_RANGE; x++) {
-                if (world.requestChunks.find(chunk => chunk.x == x && chunk.y == y) == null) {
-                    world.requestChunks.push({ x, y });
-                    requestChunk(x, y);
+        if (this.con.connected) {
+            const cx = Math.floor(camera.position.x / CHUNK_SIZE);
+            const cy = Math.floor(camera.position.z / CHUNK_SIZE);
+            for (let y = cy - CHUNK_FETCH_RANGE; y <= cy + CHUNK_FETCH_RANGE; y++) {
+                for (let x = cx - CHUNK_FETCH_RANGE; x <= cx + CHUNK_FETCH_RANGE; x++) {
+                    if (world.requestChunks.find(chunk => chunk.x == x && chunk.y == y) == null) {
+                        world.requestChunks.push({ x, y });
+                        this.con.sendWorldChunkMessage(x, y);
+                    }
                 }
             }
         }
@@ -726,12 +766,13 @@ class Game {
 
     loop() {
         window.requestAnimationFrame(this.loop.bind(this));
-        stats.begin();
+        this.stats.begin();
         const time = now();
         this.update((time - this.oldTime) / 1000);
         this.oldTime = time;
         this.render(this.gl);
-        stats.end();
+        this.updateDebugLabel();
+        this.stats.end();
     }
 
     start() {
@@ -741,39 +782,5 @@ class Game {
     }
 }
 
-// Game instance
-const game = new Game('canvas');
-
-// Keys stuff
-const keys = {};
-window.addEventListener('keydown', event => {
-    keys[event.key.toLowerCase()] = true;
-});
-window.addEventListener('keyup', event => {
-    keys[event.key.toLowerCase()] = false;
-});
-
-// Pointer lock stuff
-let pointerlock = false;
-let yaw = 0;
-let pitch = 0;
-
-canvas.addEventListener('mousedown', () => {
-    canvas.requestPointerLock();
-});
-
-window.addEventListener('mousemove', event => {
-    if (pointerlock) {
-        yaw -= event.movementX * 0.004;
-        pitch -= event.movementY * 0.004;
-        if (pitch > radians(90)) pitch = radians(90);
-        if (pitch < -radians(90)) pitch = -radians(90);
-        game.camera.rotation.x = -pitch;
-        game.camera.rotation.y = -yaw;
-        game.camera.updateMatrix();
-    }
-});
-
-document.addEventListener('pointerlockchange', () => {
-    pointerlock = document.pointerLockElement == canvas;
-});
+const game = new Game();
+game.start();

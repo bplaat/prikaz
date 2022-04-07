@@ -4,16 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Prikaz</title>
-    <style>body{font:16px/1 Consolas,monospace;margin:0;background-color:#000}#canvas{display:block}</style>
+    <script src="stats.min.js"></script>
+    <style>
+    body{font-family:Consolas,monospace;font-size:16px;line-height:1;margin:0;background-color:#000}
+    #canvas{display:block}#debug{position:absolute;top:0;left:0;padding:8px;color:#111}
+    #crosshair{position:absolute;top:0;left:0;right:0;bottom:0;margin:auto}
+    </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
-    <div id="debug" style="position:absolute;top:0;left:0;padding:8px;color:#111"></div>
-    <svg style="position:absolute;top:0;left:0;right:0;bottom:0;margin:auto" width="24" height="24">
+    <div id="debug"></div>
+    <svg id="crosshair" width="24" height="24">
         <rect fill="rgba(255, 255, 255, 0.9)" x="0" y="10" width="24" height="4" />
         <rect fill="rgba(255, 255, 255, 0.9)" x="10" y="0" width="4" height="24" />
     </svg>
-    <script src="stats.min.js"></script>
     <script src="game.js"></script>
 </body>
 </html>
