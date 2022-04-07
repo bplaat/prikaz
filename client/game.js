@@ -342,9 +342,9 @@ const ObjectType = {
     PLANE: 2
 };
 
-const RENDER_DIST = 250;
+const RENDER_DIST = 100;
 const CHUNK_SIZE = 16;
-const INSTANCE_BUFFER_SIZE = 2048;
+const INSTANCE_BUFFER_SIZE = 4096;
 const CHUNK_FETCH_RANGE = RENDER_DIST / CHUNK_SIZE;
 
 // World
@@ -365,7 +365,7 @@ let gl = undefined;
 
 // Websocket connection
 const ws = new WebSocket('ws://localhost:8080/ws');
-ws.binaryType = 'arrayview';
+ws.binaryType = 'arraybuffer';
 
 function requestChunk(x, y) {
     const message = new ArrayBuffer(1 + 4 * 2);
@@ -385,10 +385,15 @@ ws.onopen = () => {
     ws.send(message);
 
     game.start();
+
+    requestChunk(0, 0);
+    requestChunk(1, 0);
+    requestChunk(0, 1);
+    requestChunk(1, 1);
 };
 
 ws.onmessage = async event => {
-    const messageView = new DataView(await event.data.arrayBuffer());
+    const messageView = new DataView(event.data);
 
     let pos = 0;
     const type = messageView.getUint8(pos); pos += 1;
@@ -469,7 +474,7 @@ function updateDebugText() {
     debug.textContent = `Camera: ${game.camera.position.x.toFixed(3)}x${game.camera.position.y.toFixed(3)}x${game.camera.position.z.toFixed(3)}
         ${game.camera.rotation.x.toFixed(3)}x${game.camera.rotation.y.toFixed(3)}x${game.camera.rotation.z.toFixed(3)} -
         Chunk: ${Math.floor(game.camera.position.x / CHUNK_SIZE)}x${Math.floor(game.camera.position.z / CHUNK_SIZE)}
-        - Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Draws: ${game.drawCount}`;
+        - Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Draws: ${game.itemCount} / ${game.drawCount}`;
 }
 
 
@@ -621,6 +626,7 @@ class Game {
     }
 
     render(gl) {
+        this.itemCount = 0;
         this.drawCount = 0;
 
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -648,6 +654,7 @@ class Game {
         });
 
         // Draw world instances
+        let groupItems = 0, groupTextures = [];
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         for (const instance of world.instances) {
@@ -656,6 +663,10 @@ class Game {
             }
 
             const object = objectLookup[instance.object_id];
+
+            if (textureLookup[object.texture_id].texture == undefined) {
+                continue;
+            }
 
             const object3d = new Object3D();
             object3d.position.x = instance.position_x;
@@ -677,20 +688,38 @@ class Game {
             object3d.updateMatrix();
 
             // Set matrix and texture repeat
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-            gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(object3d.matrix.elements));
-            gl.bufferSubData(gl.ARRAY_BUFFER, 16 * 4, new Float32Array([ 2, object.texture_repeat_x, object.texture_repeat_y ]));
-
-            // Select texture
-            if (textureLookup[object.texture_id].texture != undefined) {
-                gl.activeTexture(gl.TEXTURE2);
-                gl.bindTexture(gl.TEXTURE_2D, textureLookup[object.texture_id].texture);
+            let groupTextureIndex = groupTextures.indexOf(object.texture_id);
+            if (groupTextureIndex == -1) {
+                groupTextures.push(object.texture_id);
+                groupTextureIndex = groupTextures.length - 1;
             }
 
-            // Draw!
-            this.instancedArraysExtension.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 6, 1);
-            this.drawCount++;
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+            gl.bufferSubData(gl.ARRAY_BUFFER, groupItems * 19 * 4, new Float32Array(object3d.matrix.elements));
+            gl.bufferSubData(gl.ARRAY_BUFFER, groupItems * 19 * 4 + 16 * 4, new Float32Array([ groupTextureIndex, object.texture_repeat_x, object.texture_repeat_y ]));
+            groupItems++;
+            this.itemCount++;
+
+            // Draw when instance buffer is full
+            if (groupItems == INSTANCE_BUFFER_SIZE - 1 || groupTextures.length == 8) {
+                for (let i = 0; i < groupTextures.length; i++) {
+                    gl.activeTexture(gl.TEXTURE0 + i);
+                    gl.bindTexture(gl.TEXTURE_2D, textureLookup[groupTextures[i]].texture);
+                }
+                this.instancedArraysExtension.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 6, groupItems);
+                this.drawCount++;
+
+                groupItems = 0;
+                groupTextures = [];
+            }
         }
+
+        for (let i = 0; i < groupTextures.length; i++) {
+            gl.activeTexture(gl.TEXTURE0 + i);
+            gl.bindTexture(gl.TEXTURE_2D, textureLookup[groupTextures[i]].texture);
+        }
+        this.instancedArraysExtension.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 6, groupItems);
+        this.drawCount++;
 
         gl.disable(gl.BLEND);
     }
