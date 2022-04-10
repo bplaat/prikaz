@@ -654,7 +654,7 @@ class Game {
 
     keydown(event) {
         this.keys[event.key.toLowerCase()] = true;
-        if (this.keys['o'] && CHUNK_RENDER_RANGE >= 4) {
+        if (this.keys['o'] && CHUNK_RENDER_RANGE > 4) {
             CHUNK_RENDER_RANGE--;
             CHUNK_FETCH_RANGE = CHUNK_RENDER_RANGE + 2;
             this.handleChunkUpdate();
@@ -784,19 +784,41 @@ class Game {
             }
         }
 
-        // Rotate all sprite instances in the transparent render groups
-        for (const renderGroup of this.transparentRenderGroups) {
-            for (let i = 0; i < renderGroup.instances.length; i++) {
-                const instance = renderGroup.instances[i];
+        // Rotate all sprite instances in the transparent render groups except the last
+        for (let i = 0; i < this.transparentRenderGroups.length; i++) {
+            const renderGroup = this.transparentRenderGroups[i];
+            for (let j = 0; j < renderGroup.instances.length; j++) {
+                const instance = renderGroup.instances[j];
                 const object = objectLookup[instance.object_id];
                 if (object.type == ObjectType.SPRITE) {
                     instance.object3d.rotation.y = Math.atan2(this.camera.position.x - instance.position_x, this.camera.position.z - instance.position_z);
                     instance.object3d.updateMatrix();
-                    for (let j = 0; j < 16; j++) {
-                        renderGroup.data[i * 19 + j] = instance.object3d.matrix.elements[j];
+                    if (i != this.transparentRenderGroups.length - 1) {
+                        for (let k = 0; k < 16; k++) {
+                            renderGroup.data[j * 19 + k] = instance.object3d.matrix.elements[k];
+                        }
                     }
                 }
             }
+        }
+
+        // Reorder the last transparent render group
+        const renderGroup = this.transparentRenderGroups[this.transparentRenderGroups.length - 1];
+        renderGroup.instances.sort((a, b) => {
+            return Math.sqrt((this.camera.position.x - b.position_x) ** 2 + (this.camera.position.z - b.position_z) ** 2) -
+                Math.sqrt((this.camera.position.x - a.position_x) ** 2 + (this.camera.position.z - a.position_z) ** 2);
+        });
+
+        // Refill the instance data of the last transparent render group
+        for (let i = 0; i < renderGroup.instances.length; i++) {
+            const instance = renderGroup.instances[i];
+            const object = objectLookup[instance.object_id];
+            for (let j = 0; j < 16; j++) {
+                renderGroup.data[i * 19 + j] = instance.object3d.matrix.elements[j];
+            }
+            renderGroup.data[i * 19 + 16] = renderGroup.textures.indexOf(object.texture_id);
+            renderGroup.data[i * 19 + 17] = object.texture_repeat_x;
+            renderGroup.data[i * 19 + 18] = object.texture_repeat_y;
         }
     }
 
