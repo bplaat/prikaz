@@ -3,6 +3,12 @@ function now() {
     return 'performance' in window ? performance.now() : Date.now();
 }
 
+function formatBytes(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MiB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
+    return bytes + ' B';
+}
+
 // Math
 function degrees(radians) {
     return radians * 180 / Math.PI;
@@ -173,13 +179,6 @@ class Vector4 {
         return new Vector4(this.x, this.y, this.z, this.w);
     }
 
-    set(x = 0, y = 0, z = 0, w = 1) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.w = w;
-    }
-
     add(vector) {
         this.x += vector.x;
         this.y += vector.y;
@@ -226,10 +225,6 @@ class Vector4 {
 
     dist(vector) {
         return Math.sqrt((this.x - vector.x) ** 2 + (this.y - vector.y) ** 2 + (this.z - vector.z) ** 2);
-    }
-
-    distFlat(vector) {
-        return Math.sqrt((this.x - vector.x) ** 2 + (this.z - vector.z) ** 2);
     }
 }
 
@@ -345,12 +340,13 @@ const world = {
 
 // Websocket connection
 class Connection {
-    constructor(gl, camera, url) {
-        this.gl = gl;
-        this.camera = camera;
+    constructor(game, url) {
+        this.game = game;
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
         this.connected = false;
+        this.sendBytes = 0;
+        this.receiveBytes = 0;
         this.ws.onopen = this.onOpen.bind(this);
         this.ws.onmessage = this.onMessage.bind(this);
     }
@@ -361,7 +357,7 @@ class Connection {
     }
 
     onMessage(event) {
-        const gl = this.gl;
+        const gl = this.game.gl;
         const messageView = new DataView(event.data);
 
         let pos = 0;
@@ -382,7 +378,7 @@ class Connection {
 
                 const image = new Image();
                 image.crossOrigin = '';
-                image.src = 'http://localhost:8080/textures/' + texture.id;
+                image.src = `http://localhost:8080/textures/${texture.id}`;
                 image.onload = () => {
                     texture.texture = gl.createTexture();
                     gl.bindTexture(gl.TEXTURE_2D, texture.texture);
@@ -413,7 +409,7 @@ class Connection {
                 objectLookup[object.id] = object;
             }
 
-            game.handleChunkUpdate();
+            this.game.handleChunkUpdate();
         }
 
         // Parse world info response message
@@ -475,19 +471,23 @@ class Connection {
             }
 
             // Do chunk update when chunk is in render distance
-            const chunkX = Math.floor(game.camera.position.x / CHUNK_SIZE);
-            const chunkY = Math.floor(game.camera.position.z / CHUNK_SIZE);
+            const chunkX = Math.floor(this.game.camera.position.x / CHUNK_SIZE);
+            const chunkY = Math.floor(this.game.camera.position.z / CHUNK_SIZE);
             if (Math.sqrt((chunk.x - chunkX) ** 2 + (chunk.y - chunkY) ** 2) <= CHUNK_RENDER_RANGE) {
-                game.handleChunkUpdate();
+                this.game.handleChunkUpdate();
             }
         }
+
+        this.receiveBytes += pos;
     }
 
     sendWorldInfoMessage() {
         const message = new ArrayBuffer(1);
         const messageView = new DataView(message);
-        messageView.setUint8(0, MessageType.WORLD_INFO);
+        let pos = 0;
+        messageView.setUint8(0, MessageType.WORLD_INFO); pos += 1
         this.ws.send(message);
+        this.sendBytes += pos;
     }
 
     sendWorldChunkMessage(x, y) {
@@ -496,8 +496,9 @@ class Connection {
         let pos = 0;
         messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
         messageView.setInt32(pos, x, true); pos += 4;
-        messageView.setInt32(pos, y, true);
+        messageView.setInt32(pos, y, true); pos += 4;
         this.ws.send(message);
+        this.sendBytes += pos;
     }
 }
 
@@ -515,8 +516,8 @@ class Game {
     resize() {
         this.canvas.width = window.innerWidth * this.pixelRatio;
         this.canvas.height = window.innerHeight * this.pixelRatio;
-        this.canvas.style.width = window.innerWidth + 'px';
-        this.canvas.style.height = window.innerHeight + 'px';
+        this.canvas.style.width = `${window.innerWidth}px`;
+        this.canvas.style.height = `${window.innerHeight}px`;
 
         if (this.camera != undefined) {
             this.camera.aspect = this.canvas.width / this.canvas.height;
@@ -525,14 +526,14 @@ class Game {
     }
 
     init(gl) {
+        // Connect to the server
+        this.con = new Connection(this, 'ws://localhost:8080/ws');
+
         // Camera
         this.camera = new PerspectiveCamera(radians(75), this.canvas.width / this.canvas.height, 0.1, 10000);
         this.camera.position.y = 1.75;
         this.camera.position.z = 5;
         this.camera.updateMatrix();
-
-        // Connect to the server
-        this.con = new Connection(gl, this.camera, 'ws://localhost:8080/ws');
 
         // Get texture unit count
         this.maxTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
@@ -695,7 +696,9 @@ class Game {
         this.debugLabel.textContent = `Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
             ${this.camera.rotation.x.toFixed(3)}x${this.camera.rotation.y.toFixed(3)}x${this.camera.rotation.z.toFixed(3)} -
             Chunk: ${Math.floor(this.camera.position.x / CHUNK_SIZE)}x${Math.floor(this.camera.position.z / CHUNK_SIZE)} -
-            Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Dist: ${CHUNK_RENDER_RANGE}  - Draws: ${this.itemCount} / ${this.drawCount}`;
+            Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Dist: ${CHUNK_RENDER_RANGE} -
+            Send: ${formatBytes(this.con.sendBytes)} - Received: ${formatBytes(this.con.receiveBytes)} -
+            Draws: ${this.itemCount} / ${this.drawCount}`;
     }
 
     update(delta) {
@@ -830,8 +833,8 @@ class Game {
         const chunkY = Math.floor(this.camera.position.z / CHUNK_SIZE);
         for (let y = chunkY - CHUNK_FETCH_RANGE; y < chunkY + CHUNK_FETCH_RANGE; y++) {
             for (let x = chunkX - CHUNK_FETCH_RANGE; x < chunkX + CHUNK_FETCH_RANGE; x++) {
-                if (!world.requestedChunksLookup[x + 'x' + y]) {
-                    world.requestedChunksLookup[x + 'x' + y] = true;
+                if (!world.requestedChunksLookup[`${x}x${y}`]) {
+                    world.requestedChunksLookup[`${x}x${y}`] = true;
                     this.con.sendWorldChunkMessage(x, y);
                 }
             }

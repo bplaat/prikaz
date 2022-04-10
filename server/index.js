@@ -229,7 +229,7 @@ const server = http.createServer((req, res) => {
                 'Content-Type': texture.image.endsWith('.png') ? 'image/png' : 'image/jpeg',
                 'Access-Control-Allow-Origin': '*'
             });
-            res.end(fs.readFileSync('textures/' + texture.image));
+            res.end(fs.readFileSync(`textures/${texture.image}`));
             return;
         }
     }
