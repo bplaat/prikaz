@@ -339,7 +339,7 @@ let objectLookup = {};
 
 const world = {
     chunks: [],
-    requestChunks: [],
+    requestedChunksLookup: {},
     instances: []
 };
 
@@ -703,7 +703,7 @@ class Game {
         const oldChunkY = Math.floor(this.camera.position.z / CHUNK_SIZE);
         if (this.keys['w'] || this.keys['a'] || this.keys['d'] || this.keys['s'] || this.keys[' '] || this.keys['shift']) {
             const update = new Vector4();
-            const moveSpeed = this.camera.position.y == 2 ? 20 : 75;
+            const moveSpeed = this.camera.position.y == 2 ? 20 : 150;
             if (this.keys['w']) update.z -= moveSpeed * delta;
             if (this.keys['s']) update.z += moveSpeed * delta;
             if (this.keys['a']) update.x -= moveSpeed * delta;
@@ -830,8 +830,8 @@ class Game {
         const chunkY = Math.floor(this.camera.position.z / CHUNK_SIZE);
         for (let y = chunkY - CHUNK_FETCH_RANGE; y < chunkY + CHUNK_FETCH_RANGE; y++) {
             for (let x = chunkX - CHUNK_FETCH_RANGE; x < chunkX + CHUNK_FETCH_RANGE; x++) {
-                if (world.requestChunks.find(chunk => chunk.x == x && chunk.y == y) == null) {
-                    world.requestChunks.push({ x, y });
+                if (!world.requestedChunksLookup[x + 'x' + y]) {
+                    world.requestedChunksLookup[x + 'x' + y] = true;
                     this.con.sendWorldChunkMessage(x, y);
                 }
             }
