@@ -27,16 +27,16 @@ const ObjectType = {
 
 // World generation
 const textures = [
-    { id: 1, name: 'Water', image: 'water.jpg', transparent: false },
-    { id: 2, name: 'Sand', image: 'sand.jpg', transparent: false },
-    { id: 3, name: 'Grass', image: 'grass.jpg', transparent: false },
-    { id: 4, name: 'Tree 1', image: 'tree1.png', transparent: true },
-    { id: 5, name: 'Tree 2', image: 'tree2.png', transparent: true },
-    { id: 6, name: 'Tree 3', image: 'tree3.png', transparent: true },
-    { id: 7, name: 'Bushes', image: 'bushes.png', transparent: true },
-    { id: 8, name: 'Rose', image: 'rose.png', transparent: true },
-    { id: 9, name: 'Sunflower', image: 'sunflower.png', transparent: true },
-    { id: 10, name: 'Sandcastle', image: 'sandcastle.png', transparent: true }
+    { id: 1, name: 'Water', image: 'water.jpg', pixelated: false, transparent: false },
+    { id: 2, name: 'Sand', image: 'sand.jpg', pixelated: false, transparent: false },
+    { id: 3, name: 'Grass', image: 'grass.jpg', pixelated: false, transparent: false },
+    { id: 4, name: 'Tree 1', image: 'tree1.png', pixelated: false, transparent: true },
+    { id: 5, name: 'Tree 2', image: 'tree2.png', pixelated: false, transparent: true },
+    { id: 6, name: 'Tree 3', image: 'tree3.png', pixelated: false, transparent: true },
+    { id: 7, name: 'Bushes', image: 'bushes.png', pixelated: false, transparent: true },
+    { id: 8, name: 'Rose', image: 'rose.png', pixelated: false, transparent: true },
+    { id: 9, name: 'Sunflower', image: 'sunflower.png', pixelated: false, transparent: true },
+    { id: 10, name: 'Sandcastle', image: 'sandcastle.png', pixelated: false, transparent: true }
 ];
 
 const objects = [
@@ -131,7 +131,7 @@ wss.on('connection', ws => {
         if (type == MessageType.WORLD_INFO) {
             // Send world info response response
             const response = new ArrayBuffer(1 +
-                4 + textures.length * (4 + 1) +
+                4 + textures.length * (4 + 1 + 1) +
                 4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2)
             );
             const responseView = new DataView(response);
@@ -142,6 +142,7 @@ wss.on('connection', ws => {
             responseView.setUint32(pos, textures.length, true); pos += 4;
             for (const texture of textures) {
                 responseView.setUint32(pos, texture.id, true); pos += 4;
+                responseView.setUint8(pos, texture.pixelated); pos += 1;
                 responseView.setUint8(pos, texture.transparent); pos += 1;
             }
 
