@@ -534,6 +534,11 @@ class Game {
         // Connect to the server
         this.con = new Connection(gl, this.camera, 'ws://localhost:8080/ws');
 
+        // Get texture unit count
+        this.maxTextureUnits = gl.getParameter(gl.MAX_TEXTURE_IMAGE_UNITS);
+        this.textureUnitIndexes = [];
+        for (let i = 0; i < this.maxTextureUnits; i++) this.textureUnitIndexes.push(i);
+
         // Create default instance drawing shader
         this.shader = new Shader(gl,
             `attribute vec4 a_position;
@@ -555,21 +560,17 @@ class Game {
 
             `precision mediump float;
 
-            uniform sampler2D u_texture[8];
+            uniform sampler2D u_texture[${this.maxTextureUnits}];
 
             varying float v_texture_index;
             varying vec2 v_texture_position;
 
             void main() {
-                if (v_texture_index == 0.0) gl_FragColor = texture2D(u_texture[0], v_texture_position);
-                else if (v_texture_index == 1.0) gl_FragColor = texture2D(u_texture[1], v_texture_position);
-                else if (v_texture_index == 2.0) gl_FragColor = texture2D(u_texture[2], v_texture_position);
-                else if (v_texture_index == 3.0) gl_FragColor = texture2D(u_texture[3], v_texture_position);
-                else if (v_texture_index == 4.0) gl_FragColor = texture2D(u_texture[4], v_texture_position);
-                else if (v_texture_index == 5.0) gl_FragColor = texture2D(u_texture[5], v_texture_position);
-                else if (v_texture_index == 6.0) gl_FragColor = texture2D(u_texture[6], v_texture_position);
-                else if (v_texture_index == 7.0) gl_FragColor = texture2D(u_texture[7], v_texture_position);
-                else gl_FragColor = vec4(0, 0, 0, 1);
+                for (int i = 0; i < ${this.maxTextureUnits}; i++) {
+                    if (int(v_texture_index) == i) {
+                        gl_FragColor = texture2D(u_texture[i], v_texture_position);
+                    }
+                }
             }`
         );
         this.positionAttributeLocation = this.shader.getAttribLocation('a_position');
@@ -740,7 +741,7 @@ class Game {
             let textureIndex = renderGroup.textures.indexOf(object.texture_id);
             if (textureIndex == -1) {
                 // Go to next render group
-                if (renderGroup.textures.length == 8) {
+                if (renderGroup.textures.length == this.maxTextureUnits) {
                     renderGroups.push(renderGroup);
                     renderGroup = { instances: [], data: [], textures: [] };
                 }
@@ -875,8 +876,8 @@ class Game {
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.CULL_FACE);
 
-        // Set textures to first 8 texture unit
-        gl.uniform1iv(this.textureUniformLocation, [0, 1, 2, 3, 4, 5, 6, 7]);
+        // Set textures to first texture unit indexs
+        gl.uniform1iv(this.textureUniformLocation, this.textureUnitIndexes);
 
         // Select plane vertex stuff
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);

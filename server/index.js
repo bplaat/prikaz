@@ -36,7 +36,10 @@ const textures = [
     { id: 7, name: 'Bushes', image: 'bushes.png', pixelated: false, transparent: true },
     { id: 8, name: 'Rose', image: 'rose.png', pixelated: false, transparent: true },
     { id: 9, name: 'Sunflower', image: 'sunflower.png', pixelated: false, transparent: true },
-    { id: 10, name: 'Sandcastle', image: 'sandcastle.png', pixelated: false, transparent: true }
+    { id: 10, name: 'Sandcastle', image: 'sandcastle.png', pixelated: false, transparent: true },
+    { id: 11, name: 'Campfire', image: 'campfire.png', pixelated: false, transparent: true },
+    { id: 12, name: 'Statue', image: 'statue.png', pixelated: true, transparent: true },
+    { id: 13, name: 'Streetlight', image: 'streetlight.png', pixelated: false, transparent: true }
 ];
 
 const objects = [
@@ -49,7 +52,10 @@ const objects = [
     { id: 7, type: ObjectType.SPRITE, name: 'Bushes', width: 3, height: 3, depth: 0, texture_id: 7, texture_repeat_x: 1, texture_repeat_y: 1 },
     { id: 8, type: ObjectType.SPRITE, name: 'Rose', width: 1, height: 1, depth: 0, texture_id: 8, texture_repeat_x: 1, texture_repeat_y: 1 },
     { id: 9, type: ObjectType.SPRITE, name: 'Sun flower', width: 1, height: 1, depth: 0, texture_id: 9, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 10, type: ObjectType.SPRITE, name: 'Sandcastle', width: 1.5, height: 1.5, depth: 0, texture_id: 10, texture_repeat_x: 1, texture_repeat_y: 1 }
+    { id: 10, type: ObjectType.SPRITE, name: 'Sandcastle', width: 1.5, height: 1.5, depth: 0, texture_id: 10, texture_repeat_x: 1, texture_repeat_y: 1 },
+    { id: 11, type: ObjectType.SPRITE, name: 'Campfire', width: 2, height: 2, depth: 0, texture_id: 11, texture_repeat_x: 1, texture_repeat_y: 1 },
+    { id: 12, type: ObjectType.SPRITE, name: 'Statue', width: 4, height: 4, depth: 0, texture_id: 12, texture_repeat_x: 1, texture_repeat_y: 1 },
+    { id: 13, type: ObjectType.SPRITE, name: 'Streetlight', width: 6, height: 6, depth: 0, texture_id: 13, texture_repeat_x: 1, texture_repeat_y: 1 }
 ];
 
 const world = {
@@ -99,7 +105,7 @@ function createChunk(x, y) {
             world.instances.push({
                 id: world.instances.length + 1,
                 chunk_id: chunk.id,
-                object_id: rand(n > 0.6 ? 4 : 7, 9),
+                object_id: rand(n > 0.6 ? 4 : 7, rand(9, 13)),
                 position_x: x * CHUNK_SIZE + rand(0, CHUNK_SIZE),
                 position_y: 0,
                 position_z: y * CHUNK_SIZE + rand(0, CHUNK_SIZE),
