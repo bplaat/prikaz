@@ -345,15 +345,19 @@ class Connection {
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
         this.connected = false;
+        this.sendCount = 0;
         this.sendBytes = 0;
+        this.receiveCount = 0;
         this.receiveBytes = 0;
+        this.sendQueue = [];
         this.ws.onopen = this.onOpen.bind(this);
         this.ws.onmessage = this.onMessage.bind(this);
     }
 
     onOpen() {
         this.connected = true;
-        this.sendWorldInfoMessage();
+        this.sendQueue.push({ type: MessageType.WORLD_INFO });
+        this.flushSendQueue();
     }
 
     onMessage(event) {
@@ -478,27 +482,43 @@ class Connection {
             }
         }
 
+        this.receiveCount += 1;
         this.receiveBytes += pos;
     }
 
-    sendWorldInfoMessage() {
-        const message = new ArrayBuffer(1);
-        const messageView = new DataView(message);
-        let pos = 0;
-        messageView.setUint8(0, MessageType.WORLD_INFO); pos += 1
-        this.ws.send(message);
-        this.sendBytes += pos;
-    }
+    // Send all items that are in the send queue
+    flushSendQueue() {
+        // Check if there is any message to send
+        if (this.sendQueue.length == 0) return;
 
-    sendWorldChunkMessage(x, y) {
-        const message = new ArrayBuffer(1 + 4 * 2);
+        // Calculate the total message size
+        let messageSize = 0;
+        for (const item of this.sendQueue) {
+            if (item.type == MessageType.WORLD_INFO) messageSize += 1;
+            if (item.type == MessageType.WORLD_CHUNK) messageSize += 1 + 4 + 4;
+        }
+
+        // Create the message buffer and fill it with data
+        const message = new ArrayBuffer(messageSize);
         const messageView = new DataView(message);
         let pos = 0;
-        messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
-        messageView.setInt32(pos, x, true); pos += 4;
-        messageView.setInt32(pos, y, true); pos += 4;
+        for (const item of this.sendQueue) {
+            if (item.type == MessageType.WORLD_INFO) {
+                messageView.setUint8(0, MessageType.WORLD_INFO); pos += 1
+            }
+
+            if (item.type == MessageType.WORLD_CHUNK) {
+                messageView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
+                messageView.setInt32(pos, item.x, true); pos += 4;
+                messageView.setInt32(pos, item.y, true); pos += 4;
+            }
+        }
         this.ws.send(message);
+        this.sendCount += 1;
         this.sendBytes += pos;
+
+        // At last clear the send queue
+        this.sendQueue = [];
     }
 }
 
@@ -693,11 +713,15 @@ class Game {
     }
 
     updateDebugLabel() {
-        this.debugLabel.textContent = `Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
+        this.debugLabel.innerHTML = `Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
             ${this.camera.rotation.x.toFixed(3)}x${this.camera.rotation.y.toFixed(3)}x${this.camera.rotation.z.toFixed(3)} -
             Chunk: ${Math.floor(this.camera.position.x / CHUNK_SIZE)}x${Math.floor(this.camera.position.z / CHUNK_SIZE)} -
-            Chunks: ${world.chunks.length} - Instances: ${world.instances.length} - Dist: ${CHUNK_RENDER_RANGE} -
-            Send: ${formatBytes(this.con.sendBytes)} - Received: ${formatBytes(this.con.receiveBytes)} -
+            Chunks: ${world.chunks.length} -
+            Instances: ${world.instances.length}<br />
+
+            Dist: ${CHUNK_RENDER_RANGE} -
+            Send: ${formatBytes(this.con.sendBytes)} / ${this.con.sendCount} -
+            Received: ${formatBytes(this.con.receiveBytes)} / ${this.con.receiveCount} -
             Draws: ${this.itemCount} / ${this.drawCount}`;
     }
 
@@ -835,10 +859,11 @@ class Game {
             for (let x = chunkX - CHUNK_FETCH_RANGE; x < chunkX + CHUNK_FETCH_RANGE; x++) {
                 if (!world.requestedChunksLookup[`${x}x${y}`]) {
                     world.requestedChunksLookup[`${x}x${y}`] = true;
-                    this.con.sendWorldChunkMessage(x, y);
+                    this.con.sendQueue.push({ type: MessageType.WORLD_CHUNK, x, y });
                 }
             }
         }
+        this.con.flushSendQueue();
 
         // Collect all instances that need to be rendered
         const opaqueInstances = [];

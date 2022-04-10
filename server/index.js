@@ -130,78 +130,80 @@ wss.on('connection', ws => {
         data.copy(message, 0, 0, data.byteLength);
         const messageView = new DataView(message.buffer);
 
-        let pos = 0;
-        const type = messageView.getUint8(0); pos += 1;
+        let readPos = 0;
+        while (readPos != data.byteLength) {
+            const type = messageView.getUint8(readPos); readPos += 1;
 
-        // World info response
-        if (type == MessageType.WORLD_INFO) {
-            // Send world info response response
-            const response = new ArrayBuffer(1 +
-                4 + textures.length * (4 + 1 + 1) +
-                4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2)
-            );
-            const responseView = new DataView(response);
-            pos = 0;
-            responseView.setUint8(pos, MessageType.WORLD_INFO); pos += 1;
+            // World info response
+            if (type == MessageType.WORLD_INFO) {
+                // Send world info response response
+                const response = new ArrayBuffer(1 +
+                    4 + textures.length * (4 + 1 + 1) +
+                    4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2)
+                );
+                const responseView = new DataView(response);
+                let pos = 0;
+                responseView.setUint8(pos, MessageType.WORLD_INFO); pos += 1;
 
-            // Send textures
-            responseView.setUint32(pos, textures.length, true); pos += 4;
-            for (const texture of textures) {
-                responseView.setUint32(pos, texture.id, true); pos += 4;
-                responseView.setUint8(pos, texture.pixelated); pos += 1;
-                responseView.setUint8(pos, texture.transparent); pos += 1;
+                // Send textures
+                responseView.setUint32(pos, textures.length, true); pos += 4;
+                for (const texture of textures) {
+                    responseView.setUint32(pos, texture.id, true); pos += 4;
+                    responseView.setUint8(pos, texture.pixelated); pos += 1;
+                    responseView.setUint8(pos, texture.transparent); pos += 1;
+                }
+
+                // Send objects
+                responseView.setUint32(pos, objects.length, true); pos += 4;
+                for (const object of objects) {
+                    responseView.setUint32(pos, object.id, true); pos += 4;
+                    responseView.setUint8(pos, object.type); pos += 1;
+                    responseView.setFloat32(pos, object.width, true); pos += 4;
+                    responseView.setFloat32(pos, object.height, true); pos += 4;
+                    responseView.setFloat32(pos, object.depth, true); pos += 4;
+                    responseView.setUint32(pos, object.texture_id, true); pos += 4;
+                    responseView.setUint16(pos, object.texture_repeat_x, true); pos += 2;
+                    responseView.setUint16(pos, object.texture_repeat_y, true); pos += 2;
+                }
+                ws.send(response);
             }
 
-            // Send objects
-            responseView.setUint32(pos, objects.length, true); pos += 4;
-            for (const object of objects) {
-                responseView.setUint32(pos, object.id, true); pos += 4;
-                responseView.setUint8(pos, object.type); pos += 1;
-                responseView.setFloat32(pos, object.width, true); pos += 4;
-                responseView.setFloat32(pos, object.height, true); pos += 4;
-                responseView.setFloat32(pos, object.depth, true); pos += 4;
-                responseView.setUint32(pos, object.texture_id, true); pos += 4;
-                responseView.setUint16(pos, object.texture_repeat_x, true); pos += 2;
-                responseView.setUint16(pos, object.texture_repeat_y, true); pos += 2;
-            }
-            ws.send(response);
-        }
+            // World chunk response
+            if (type == MessageType.WORLD_CHUNK) {
+                const chunkX = messageView.getInt32(readPos, true); readPos += 4
+                const chunkY = messageView.getInt32(readPos, true); readPos += 4;
 
-        // World chunk response
-        if (type == MessageType.WORLD_CHUNK) {
-            const chunkX = messageView.getInt32(pos, true); pos += 4
-            const chunkY = messageView.getInt32(pos, true);
+                // Get or create chunk
+                let chunk = world.chunks.find(chunk => chunk.x == chunkX && chunk.y == chunkY);
+                if (chunk == null) {
+                    chunk = createChunk(chunkX, chunkY);
+                }
+                const instances = world.instances.filter(instance => instance.chunk_id == chunk.id);
 
-            // Get or create chunk
-            let chunk = world.chunks.find(chunk => chunk.x == chunkX && chunk.y == chunkY);
-            if (chunk == null) {
-                chunk = createChunk(chunkX, chunkY);
+                // Send world chunk response response
+                const response = new ArrayBuffer(1 + 4 + 4 * 2 + 4 + instances.length * (4 + 4 + 4 * 3 * 3));
+                const responseView = new DataView(response);
+                let pos = 0;
+                responseView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
+                responseView.setUint32(pos, chunk.id, true); pos += 4;
+                responseView.setInt32(pos, chunk.x, true); pos += 4;
+                responseView.setInt32(pos, chunk.y, true); pos += 4;
+                responseView.setUint32(pos, instances.length, true); pos += 4;
+                for (const instance of instances) {
+                    responseView.setUint32(pos, instance.id, true); pos += 4;
+                    responseView.setUint32(pos, instance.object_id, true); pos += 4;
+                    responseView.setFloat32(pos, instance.position_x, true); pos += 4;
+                    responseView.setFloat32(pos, instance.position_y, true); pos += 4;
+                    responseView.setFloat32(pos, instance.position_z, true); pos += 4;
+                    responseView.setFloat32(pos, instance.rotation_x, true); pos += 4;
+                    responseView.setFloat32(pos, instance.rotation_y, true); pos += 4;
+                    responseView.setFloat32(pos, instance.rotation_z, true); pos += 4;
+                    responseView.setFloat32(pos, instance.scale_x, true); pos += 4;
+                    responseView.setFloat32(pos, instance.scale_y, true); pos += 4;
+                    responseView.setFloat32(pos, instance.scale_z, true); pos += 4;
+                }
+                ws.send(response);
             }
-            const instances = world.instances.filter(instance => instance.chunk_id == chunk.id);
-
-            // Send world chunk response response
-            const response = new ArrayBuffer(1 + 4 + 4 * 2 + 4 + instances.length * (4 + 4 + 4 * 3 * 3));
-            const responseView = new DataView(response);
-            pos = 0;
-            responseView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
-            responseView.setUint32(pos, chunk.id, true); pos += 4;
-            responseView.setInt32(pos, chunk.x, true); pos += 4;
-            responseView.setInt32(pos, chunk.y, true); pos += 4;
-            responseView.setUint32(pos, instances.length, true); pos += 4;
-            for (const instance of instances) {
-                responseView.setUint32(pos, instance.id, true); pos += 4;
-                responseView.setUint32(pos, instance.object_id, true); pos += 4;
-                responseView.setFloat32(pos, instance.position_x, true); pos += 4;
-                responseView.setFloat32(pos, instance.position_y, true); pos += 4;
-                responseView.setFloat32(pos, instance.position_z, true); pos += 4;
-                responseView.setFloat32(pos, instance.rotation_x, true); pos += 4;
-                responseView.setFloat32(pos, instance.rotation_y, true); pos += 4;
-                responseView.setFloat32(pos, instance.rotation_z, true); pos += 4;
-                responseView.setFloat32(pos, instance.scale_x, true); pos += 4;
-                responseView.setFloat32(pos, instance.scale_y, true); pos += 4;
-                responseView.setFloat32(pos, instance.scale_z, true); pos += 4;
-            }
-            ws.send(response);
         }
     });
 
