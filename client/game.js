@@ -365,120 +365,122 @@ class Connection {
         const messageView = new DataView(event.data);
 
         let pos = 0;
-        const type = messageView.getUint8(pos); pos += 1;
+        while (pos != messageView.byteLength) {
+            const type = messageView.getUint8(pos); pos += 1;
 
-        // Parse world info response message
-        if (type == MessageType.WORLD_INFO) {
-            const texturesLength = messageView.getUint32(pos, true); pos += 4;
-            textures = [];
-            textureLookup = {};
-            for (let i = 0; i < texturesLength; i++) {
-                const texture = {};
-                texture.id = messageView.getUint32(pos, true); pos += 4;
-                texture.pixelated = messageView.getUint8(pos); pos += 1;
-                texture.transparent = messageView.getUint8(pos); pos += 1;
-                textures.push(texture);
-                textureLookup[texture.id] = texture;
+            // Parse world info response message
+            if (type == MessageType.WORLD_INFO) {
+                const texturesLength = messageView.getUint32(pos, true); pos += 4;
+                textures = [];
+                textureLookup = {};
+                for (let i = 0; i < texturesLength; i++) {
+                    const texture = {};
+                    texture.id = messageView.getUint32(pos, true); pos += 4;
+                    texture.pixelated = messageView.getUint8(pos); pos += 1;
+                    texture.transparent = messageView.getUint8(pos); pos += 1;
+                    textures.push(texture);
+                    textureLookup[texture.id] = texture;
 
-                const image = new Image();
-                image.crossOrigin = '';
-                image.src = `http://localhost:8080/textures/${texture.id}`;
-                image.onload = () => {
-                    texture.texture = gl.createTexture();
-                    gl.bindTexture(gl.TEXTURE_2D, texture.texture);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, texture.pixelated ? gl.NEAREST_MIPMAP_NEAREST : gl.LINEAR_MIPMAP_LINEAR);
-                    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, texture.pixelated ? gl.NEAREST : gl.LINEAR);
-                    if (texture.transparent) {
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-                    }
-                    gl.texImage2D(gl.TEXTURE_2D, 0, texture.transparent ? gl.RGBA : gl.RGB, texture.transparent ? gl.RGBA : gl.RGB, gl.UNSIGNED_BYTE, image);
-                    gl.generateMipmap(gl.TEXTURE_2D);
-                };
-            }
-            const objectsLength = messageView.getUint32(pos, true); pos += 4;
-            objects = [];
-            objectLookup = {};
-            for (let i = 0; i < objectsLength; i++) {
-                const object = {};
-                object.id = messageView.getUint32(pos, true); pos += 4;
-                object.type = messageView.getUint8(pos); pos += 1;
-                object.width = messageView.getFloat32(pos, true); pos += 4;
-                object.height = messageView.getFloat32(pos, true); pos += 4;
-                object.depth = messageView.getFloat32(pos, true); pos += 4;
-                object.texture_id = messageView.getUint32(pos, true); pos += 4;
-                object.texture_repeat_x = messageView.getUint16(pos, true); pos += 2;
-                object.texture_repeat_y = messageView.getUint16(pos, true); pos += 2;
-                objects.push(object);
-                objectLookup[object.id] = object;
-            }
-
-            this.game.handleChunkUpdate();
-        }
-
-        // Parse world info response message
-        if (type == MessageType.WORLD_CHUNK) {
-            const chunk = {};
-            chunk.id = messageView.getUint32(pos, true); pos += 4;
-            chunk.x = messageView.getInt32(pos, true); pos += 4;
-            chunk.y = messageView.getInt32(pos, true); pos += 4;
-            chunk.instances = [];
-            chunk.opaqueInstances = [];
-            chunk.transparentInstances = [];
-            world.chunks.push(chunk);
-
-            // Create chunk instances and sort by opaque or transparent texture
-            // And create object3d / matrixes for all non sprite instances
-            const instancesLength = messageView.getUint32(pos, true); pos += 4;
-            for (let i = 0; i < instancesLength; i++) {
-                const instance = {};
-                instance.id = messageView.getUint32(pos, true); pos += 4;
-                instance.chunk_id = chunk.id;
-                instance.object_id = messageView.getUint32(pos, true); pos += 4;
-                instance.position_x = messageView.getFloat32(pos, true); pos += 4;
-                instance.position_y = messageView.getFloat32(pos, true); pos += 4;
-                instance.position_z = messageView.getFloat32(pos, true); pos += 4;
-                instance.rotation_x = messageView.getFloat32(pos, true); pos += 4;
-                instance.rotation_y = messageView.getFloat32(pos, true); pos += 4;
-                instance.rotation_z = messageView.getFloat32(pos, true); pos += 4;
-                instance.scale_x = messageView.getFloat32(pos, true); pos += 4;
-                instance.scale_y = messageView.getFloat32(pos, true); pos += 4;
-                instance.scale_z = messageView.getFloat32(pos, true); pos += 4;
-
-                const object = objectLookup[instance.object_id];
-                instance.object3d = new Object3D();
-                instance.object3d.position.x = instance.position_x;
-                instance.object3d.position.y = instance.position_y + object.height / 2;
-                instance.object3d.position.z = instance.position_z;
-
-                instance.object3d.rotation.x = instance.rotation_x;
-                if (object.type != ObjectType.SPRITE) {
-                    instance.object3d.rotation.y = instance.rotation_y;
+                    const image = new Image();
+                    image.crossOrigin = '';
+                    image.src = `http://localhost:8080/textures/${texture.id}`;
+                    image.onload = () => {
+                        texture.texture = gl.createTexture();
+                        gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, texture.pixelated ? gl.NEAREST_MIPMAP_NEAREST : gl.LINEAR_MIPMAP_LINEAR);
+                        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, texture.pixelated ? gl.NEAREST : gl.LINEAR);
+                        if (texture.transparent) {
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+                            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+                        }
+                        gl.texImage2D(gl.TEXTURE_2D, 0, texture.transparent ? gl.RGBA : gl.RGB, texture.transparent ? gl.RGBA : gl.RGB, gl.UNSIGNED_BYTE, image);
+                        gl.generateMipmap(gl.TEXTURE_2D);
+                    };
                 }
-                instance.object3d.rotation.z = instance.rotation_z;
-
-                instance.object3d.scale.x = object.width * instance.scale_x;
-                instance.object3d.scale.y = object.height * instance.scale_y;
-                instance.object3d.scale.z = object.depth * instance.scale_z;
-
-                if (object.type != ObjectType.SPRITE) {
-                    instance.object3d.updateMatrix();
+                const objectsLength = messageView.getUint32(pos, true); pos += 4;
+                objects = [];
+                objectLookup = {};
+                for (let i = 0; i < objectsLength; i++) {
+                    const object = {};
+                    object.id = messageView.getUint32(pos, true); pos += 4;
+                    object.type = messageView.getUint8(pos); pos += 1;
+                    object.width = messageView.getFloat32(pos, true); pos += 4;
+                    object.height = messageView.getFloat32(pos, true); pos += 4;
+                    object.depth = messageView.getFloat32(pos, true); pos += 4;
+                    object.texture_id = messageView.getUint32(pos, true); pos += 4;
+                    object.texture_repeat_x = messageView.getUint16(pos, true); pos += 2;
+                    object.texture_repeat_y = messageView.getUint16(pos, true); pos += 2;
+                    objects.push(object);
+                    objectLookup[object.id] = object;
                 }
 
-                chunk.instances.push(instance);
-                if (textureLookup[object.texture_id].transparent) {
-                    chunk.transparentInstances.push(instance);
-                } else {
-                    chunk.opaqueInstances.push(instance);
-                }
-                world.instances.push(instance);
-            }
-
-            // Do chunk update when chunk is in render distance
-            const chunkX = Math.floor(this.game.camera.position.x / CHUNK_SIZE);
-            const chunkY = Math.floor(this.game.camera.position.z / CHUNK_SIZE);
-            if (Math.sqrt((chunk.x - chunkX) ** 2 + (chunk.y - chunkY) ** 2) <= CHUNK_RENDER_RANGE) {
                 this.game.handleChunkUpdate();
+            }
+
+            // Parse world info response message
+            if (type == MessageType.WORLD_CHUNK) {
+                const chunk = {};
+                chunk.id = messageView.getUint32(pos, true); pos += 4;
+                chunk.x = messageView.getInt32(pos, true); pos += 4;
+                chunk.y = messageView.getInt32(pos, true); pos += 4;
+                chunk.instances = [];
+                chunk.opaqueInstances = [];
+                chunk.transparentInstances = [];
+                world.chunks.push(chunk);
+
+                // Create chunk instances and sort by opaque or transparent texture
+                // And create object3d / matrixes for all non sprite instances
+                const instancesLength = messageView.getUint32(pos, true); pos += 4;
+                for (let i = 0; i < instancesLength; i++) {
+                    const instance = {};
+                    instance.id = messageView.getUint32(pos, true); pos += 4;
+                    instance.chunk_id = chunk.id;
+                    instance.object_id = messageView.getUint32(pos, true); pos += 4;
+                    instance.position_x = messageView.getFloat32(pos, true); pos += 4;
+                    instance.position_y = messageView.getFloat32(pos, true); pos += 4;
+                    instance.position_z = messageView.getFloat32(pos, true); pos += 4;
+                    instance.rotation_x = messageView.getFloat32(pos, true); pos += 4;
+                    instance.rotation_y = messageView.getFloat32(pos, true); pos += 4;
+                    instance.rotation_z = messageView.getFloat32(pos, true); pos += 4;
+                    instance.scale_x = messageView.getFloat32(pos, true); pos += 4;
+                    instance.scale_y = messageView.getFloat32(pos, true); pos += 4;
+                    instance.scale_z = messageView.getFloat32(pos, true); pos += 4;
+
+                    const object = objectLookup[instance.object_id];
+                    instance.object3d = new Object3D();
+                    instance.object3d.position.x = instance.position_x;
+                    instance.object3d.position.y = instance.position_y + object.height / 2;
+                    instance.object3d.position.z = instance.position_z;
+
+                    instance.object3d.rotation.x = instance.rotation_x;
+                    if (object.type != ObjectType.SPRITE) {
+                        instance.object3d.rotation.y = instance.rotation_y;
+                    }
+                    instance.object3d.rotation.z = instance.rotation_z;
+
+                    instance.object3d.scale.x = object.width * instance.scale_x;
+                    instance.object3d.scale.y = object.height * instance.scale_y;
+                    instance.object3d.scale.z = object.depth * instance.scale_z;
+
+                    if (object.type != ObjectType.SPRITE) {
+                        instance.object3d.updateMatrix();
+                    }
+
+                    chunk.instances.push(instance);
+                    if (textureLookup[object.texture_id].transparent) {
+                        chunk.transparentInstances.push(instance);
+                    } else {
+                        chunk.opaqueInstances.push(instance);
+                    }
+                    world.instances.push(instance);
+                }
+
+                // Do chunk update when chunk is in render distance
+                const chunkX = Math.floor(this.game.camera.position.x / CHUNK_SIZE);
+                const chunkY = Math.floor(this.game.camera.position.z / CHUNK_SIZE);
+                if (Math.sqrt((chunk.x - chunkX) ** 2 + (chunk.y - chunkY) ** 2) <= CHUNK_RENDER_RANGE) {
+                    this.game.handleChunkUpdate();
+                }
             }
         }
 

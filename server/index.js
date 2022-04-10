@@ -126,23 +126,61 @@ wss.on('connection', ws => {
     console.log(`[WS] #${playerID} Connected`);
 
     ws.on('message', data => {
+        // Copy data from Node.js buffer to the nice DataView
         const message = new Uint8Array(data.byteLength);
         data.copy(message, 0, 0, data.byteLength);
         const messageView = new DataView(message.buffer);
 
-        let readPos = 0;
-        while (readPos != data.byteLength) {
-            const type = messageView.getUint8(readPos); readPos += 1;
+        // Read all incoming messages and generate response objects
+        const responses = [];
+        let pos = 0;
+        while (pos != messageView.byteLength) {
+            const type = messageView.getUint8(pos); pos += 1;
 
             // World info response
             if (type == MessageType.WORLD_INFO) {
-                // Send world info response response
-                const response = new ArrayBuffer(1 +
-                    4 + textures.length * (4 + 1 + 1) +
-                    4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2)
-                );
-                const responseView = new DataView(response);
-                let pos = 0;
+                responses.push({
+                    type: MessageType.WORLD_INFO
+                });
+            }
+
+            // World chunk response
+            if (type == MessageType.WORLD_CHUNK) {
+                const chunkX = messageView.getInt32(pos, true); pos += 4
+                const chunkY = messageView.getInt32(pos, true); pos += 4;
+
+                // Get or create chunk use that in the response
+                let chunk = world.chunks.find(chunk => chunk.x == chunkX && chunk.y == chunkY);
+                if (chunk == null) {
+                    chunk = createChunk(chunkX, chunkY);
+                }
+                responses.push({
+                    type: MessageType.WORLD_CHUNK,
+                    chunk: chunk,
+                    instances: world.instances.filter(instance => instance.chunk_id == chunk.id)
+                });
+            }
+        }
+
+        // Calculate total response size
+        let responseSize = 0;
+        for (const item of responses) {
+            if (item.type == MessageType.WORLD_INFO) {
+                responseSize += 1 + 4 + textures.length * (4 + 1 + 1) +
+                    4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2);
+            }
+            if (item.type == MessageType.WORLD_CHUNK) {
+                responseSize += 1 + 4 + 4 * 2 + 4 + item.instances.length * (4 + 4 + 4 * 3 * 3);
+            }
+        }
+
+        // Write response message data to response buffer and send
+        const response = new ArrayBuffer(responseSize);
+        const responseView = new DataView(response);
+        pos = 0;
+        for (const item of responses) {
+            // Send world info response response
+            if (item.type == MessageType.WORLD_INFO) {
                 responseView.setUint8(pos, MessageType.WORLD_INFO); pos += 1;
 
                 // Send textures
@@ -165,31 +203,16 @@ wss.on('connection', ws => {
                     responseView.setUint16(pos, object.texture_repeat_x, true); pos += 2;
                     responseView.setUint16(pos, object.texture_repeat_y, true); pos += 2;
                 }
-                ws.send(response);
             }
 
-            // World chunk response
-            if (type == MessageType.WORLD_CHUNK) {
-                const chunkX = messageView.getInt32(readPos, true); readPos += 4
-                const chunkY = messageView.getInt32(readPos, true); readPos += 4;
-
-                // Get or create chunk
-                let chunk = world.chunks.find(chunk => chunk.x == chunkX && chunk.y == chunkY);
-                if (chunk == null) {
-                    chunk = createChunk(chunkX, chunkY);
-                }
-                const instances = world.instances.filter(instance => instance.chunk_id == chunk.id);
-
-                // Send world chunk response response
-                const response = new ArrayBuffer(1 + 4 + 4 * 2 + 4 + instances.length * (4 + 4 + 4 * 3 * 3));
-                const responseView = new DataView(response);
-                let pos = 0;
+            // Send world chunk response response
+            if (item.type == MessageType.WORLD_CHUNK) {
                 responseView.setUint8(pos, MessageType.WORLD_CHUNK); pos += 1;
-                responseView.setUint32(pos, chunk.id, true); pos += 4;
-                responseView.setInt32(pos, chunk.x, true); pos += 4;
-                responseView.setInt32(pos, chunk.y, true); pos += 4;
-                responseView.setUint32(pos, instances.length, true); pos += 4;
-                for (const instance of instances) {
+                responseView.setUint32(pos, item.chunk.id, true); pos += 4;
+                responseView.setInt32(pos, item.chunk.x, true); pos += 4;
+                responseView.setInt32(pos, item.chunk.y, true); pos += 4;
+                responseView.setUint32(pos, item.instances.length, true); pos += 4;
+                for (const instance of item.instances) {
                     responseView.setUint32(pos, instance.id, true); pos += 4;
                     responseView.setUint32(pos, instance.object_id, true); pos += 4;
                     responseView.setFloat32(pos, instance.position_x, true); pos += 4;
@@ -202,9 +225,9 @@ wss.on('connection', ws => {
                     responseView.setFloat32(pos, instance.scale_y, true); pos += 4;
                     responseView.setFloat32(pos, instance.scale_z, true); pos += 4;
                 }
-                ws.send(response);
             }
         }
+        ws.send(response);
     });
 
     ws.on('close', () => {
