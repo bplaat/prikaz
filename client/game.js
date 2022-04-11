@@ -309,7 +309,9 @@ class Shader {
 // Game
 
 // Constants
-const CHUNK_SIZE = 32;
+let CHUNK_SIZE;
+let TICKS_PER_SECOND;
+let TICKS_PER_DAY;
 const INSTANCE_BUFFER_SIZE = 4096;
 const CAMERA_SENSITIVITY = 0.004;
 let CHUNK_RENDER_RANGE = 16;
@@ -317,7 +319,8 @@ let CHUNK_FETCH_RANGE = CHUNK_RENDER_RANGE + 2;
 
 const MessageType = {
     WORLD_INFO: 1,
-    WORLD_CHUNK: 2
+    WORLD_CHUNK: 2,
+    WORLD_TICK: 3
 };
 
 const ObjectType = {
@@ -336,7 +339,8 @@ let objectLookup = {};
 const world = {
     chunks: [],
     requestedChunksLookup: {},
-    instances: []
+    instances: [],
+    ticks: 0
 };
 
 // Websocket connection
@@ -371,6 +375,11 @@ class Connection {
 
             // Parse world info response message
             if (type == MessageType.WORLD_INFO) {
+                CHUNK_SIZE = messageView.getUint16(pos, true); pos += 2;
+                TICKS_PER_SECOND = messageView.getUint16(pos, true); pos += 2;
+                TICKS_PER_DAY = messageView.getUint16(pos, true); pos += 2;
+                world.ticks = messageView.getUint32(pos, true); pos += 4;
+
                 const texturesLength = messageView.getUint32(pos, true); pos += 4;
                 textures = [];
                 textureLookup = {};
@@ -483,6 +492,11 @@ class Connection {
                     this.game.handleChunkUpdate();
                 }
             }
+
+            // Parse world tick message
+            if (type == MessageType.WORLD_TICK) {
+                world.ticks = messageView.getUint32(pos, true); pos += 4;
+            }
         }
 
         this.receiveCount += 1;
@@ -585,6 +599,7 @@ class Game {
             `precision mediump float;
 
             uniform sampler2D u_texture[${this.maxTextureUnits}];
+            uniform float u_lightness;
 
             varying float v_texture_index;
             varying vec2 v_texture_position;
@@ -592,7 +607,7 @@ class Game {
             void main() {
                 for (int i = 0; i < ${this.maxTextureUnits}; i++) {
                     if (int(v_texture_index) == i) {
-                        gl_FragColor = texture2D(u_texture[i], v_texture_position);
+                        gl_FragColor = texture2D(u_texture[i], v_texture_position) * vec4(u_lightness, u_lightness, u_lightness, 1);
                     }
                 }
             }`
@@ -604,6 +619,7 @@ class Game {
         this.textureRepeatAttributeLocation = this.shader.getAttribLocation('a_texture_repeat');
         this.cameraUniformLocation = this.shader.getUniformLocation('u_camera');
         this.textureUniformLocation = this.shader.getUniformLocation('u_texture');
+        this.lightnessUniformLocation = this.shader.getUniformLocation('u_lightness');
 
         // Instance buffer
         this.instanceBuffer = gl.createBuffer();
@@ -782,6 +798,8 @@ class Game {
             Chunks: ${world.chunks.length} -
             Instances: ${world.instances.length}<br />
 
+            Ticks: ${world.ticks} -
+            Lightness: ${this.lightness.toFixed(3)} -
             Dist: ${CHUNK_RENDER_RANGE} -
             Send: ${formatBytes(this.con.sendBytes)} / ${this.con.sendCount} -
             Received: ${formatBytes(this.con.receiveBytes)} / ${this.con.receiveCount} -
@@ -813,6 +831,9 @@ class Game {
                 this.handlePositionUpdate();
             }
         }
+
+        // Calculate global lightness from world ticks
+        this.lightness = Math.min(Math.max((Math.cos(world.ticks / (TICKS_PER_DAY / 2)) + 1) / 1.5, 0.3), 1);
     }
 
     // Create render groups for instances
@@ -977,8 +998,9 @@ class Game {
         this.itemCount = 0;
         this.drawCount = 0;
 
+        // Clear canvas with background color
         gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-        gl.clearColor(146 / 255, 226 / 255, 251 / 255, 1);
+        gl.clearColor(0.57 * this.lightness, 0.89 * this.lightness, 0.98 * this.lightness, 1);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // Use default shader and set camera matrix
@@ -986,6 +1008,9 @@ class Game {
         gl.uniformMatrix4fv(this.cameraUniformLocation, false, this.camera.matrix.elements);
         gl.enable(gl.DEPTH_TEST);
         // gl.enable(gl.CULL_FACE);
+
+        // Set global lightness value
+        gl.uniform1f(this.lightnessUniformLocation, this.lightness);
 
         // Set textures to first texture unit indexs
         gl.uniform1iv(this.textureUniformLocation, this.textureUnitIndexes);

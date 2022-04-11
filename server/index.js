@@ -14,10 +14,13 @@ function rand(min, max) {
 // Constants
 const PORT = process.env.PORT || 8080;
 const CHUNK_SIZE = 32;
+const TICKS_PER_SECOND = 5;
+const TICKS_PER_DAY = TICKS_PER_SECOND * 10 * 60;
 
 const MessageType = {
     WORLD_INFO: 1,
-    WORLD_CHUNK: 2
+    WORLD_CHUNK: 2,
+    WORLD_TICK: 3
 };
 
 const ObjectType = {
@@ -63,7 +66,8 @@ const objects = [
 
 const world = {
     chunks: [],
-    instances: []
+    instances: [],
+    ticks: 0
 };
 
 noise.noise.seed(Math.random());
@@ -123,9 +127,26 @@ function createChunk(x, y) {
 
 // Websocket server
 const wss = new WebSocketServer({ noServer: true });
+let clients = [];
+
+// Ticks counter
+setInterval(() => {
+    world.ticks++;
+    for (const client of clients) {
+        const response = new ArrayBuffer(1 + 4);
+        const responseView = new DataView(response);
+        let pos = 0;
+        responseView.setUint8(pos, MessageType.WORLD_TICK); pos += 1;
+        responseView.setUint32(pos, world.ticks, true); pos += 4;
+        client.ws.send(response);
+    }
+}, 1000 / TICKS_PER_SECOND);
+
+// Websocket connect handler
 let playerCounter = 1;
 wss.on('connection', ws => {
     const playerID = playerCounter++;
+    clients.push({ id: playerID, ws });
     console.log(`[WS] #${playerID} Connected`);
 
     ws.on('message', data => {
@@ -169,7 +190,7 @@ wss.on('connection', ws => {
         let responseSize = 0;
         for (const item of responses) {
             if (item.type == MessageType.WORLD_INFO) {
-                responseSize += 1 + 4 + textures.length * (4 + 1 + 1) +
+                responseSize += 1 + 2 * 3 + 4 + 4 + textures.length * (4 + 1 + 1) +
                     4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2);
             }
             if (item.type == MessageType.WORLD_CHUNK) {
@@ -185,6 +206,10 @@ wss.on('connection', ws => {
             // Send world info response response
             if (item.type == MessageType.WORLD_INFO) {
                 responseView.setUint8(pos, MessageType.WORLD_INFO); pos += 1;
+                responseView.setUint16(pos, CHUNK_SIZE, true); pos += 2;
+                responseView.setUint16(pos, TICKS_PER_SECOND, true); pos += 2;
+                responseView.setUint16(pos, TICKS_PER_DAY, true); pos += 2;
+                responseView.setUint32(pos, world.ticks, true); pos += 4;
 
                 // Send textures
                 responseView.setUint32(pos, textures.length, true); pos += 4;
@@ -235,6 +260,7 @@ wss.on('connection', ws => {
 
     ws.on('close', () => {
         console.log(`[WS] #${playerID} Disconnected`);
+        clients = clients.filter(client => client.id != playerID);
     });
 });
 
@@ -266,7 +292,7 @@ const server = http.createServer((req, res) => {
     res.end('404 Not Found');
 });
 
-server.on('upgrade', function upgrade(req, socket, head) {
+server.on('upgrade', (req, socket, head) => {
     const { pathname } = new URL(req.url, `http://localhost:${PORT}/`);
     if (pathname === '/ws') {
         wss.handleUpgrade(req, socket, head, ws => {
