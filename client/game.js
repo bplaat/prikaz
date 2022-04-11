@@ -312,7 +312,7 @@ class Shader {
 const CHUNK_SIZE = 32;
 const INSTANCE_BUFFER_SIZE = 4096;
 const CAMERA_SENSITIVITY = 0.004;
-let CHUNK_RENDER_RANGE = 8;
+let CHUNK_RENDER_RANGE = 16;
 let CHUNK_FETCH_RANGE = CHUNK_RENDER_RANGE + 2;
 
 const MessageType = {
@@ -321,8 +321,9 @@ const MessageType = {
 };
 
 const ObjectType = {
-    SPRITE: 1,
-    PLANE: 2
+    PLANE: 1,
+    SPRITE: 2,
+    BOX: 3
 };
 
 // World
@@ -604,11 +605,14 @@ class Game {
         this.cameraUniformLocation = this.shader.getUniformLocation('u_camera');
         this.textureUniformLocation = this.shader.getUniformLocation('u_texture');
 
+        // Instance buffer
+        this.instanceBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, INSTANCE_BUFFER_SIZE * 19 * 4, gl.DYNAMIC_DRAW);
+
         // Plane vao
         this.planeVertexArray = this.vertexArrayExtension.createVertexArrayOES();
         this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
-
-        // Plane buffer
         this.planeBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, this.planeBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
@@ -621,27 +625,58 @@ class Game {
              0.5,  0.5, -0.5,   1, 0,
             -0.5,  0.5, -0.5,   0, 0
         ]), gl.STATIC_DRAW);
-        gl.enableVertexAttribArray(this.positionAttributeLocation);
-        gl.vertexAttribPointer(this.positionAttributeLocation, 3, gl.FLOAT, false, 5 * 4, 0);
-        gl.enableVertexAttribArray(this.texturePositionAttributeLocation);
-        gl.vertexAttribPointer(this.texturePositionAttributeLocation, 2, gl.FLOAT, false, 5 * 4, 3 * 4);
+        this.bindAttributes(gl);
 
-        // Instance buffer
-        this.instanceBuffer = gl.createBuffer();
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-        gl.bufferData(gl.ARRAY_BUFFER, INSTANCE_BUFFER_SIZE * 19 * 4, gl.DYNAMIC_DRAW);
-        for (let i = 0; i < 4; i++) {
-            const location = this.matrixAttributeLocation + i;
-            gl.enableVertexAttribArray(location);
-            gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 19 * 4, i * 4 * 4);
-            this.instancedArraysExtension.vertexAttribDivisorANGLE(location, 1);
-        }
-        gl.enableVertexAttribArray(this.textureIndexAttributeLocation);
-        gl.vertexAttribPointer(this.textureIndexAttributeLocation, 1, gl.FLOAT, false, 19 * 4, 16 * 4);
-        this.instancedArraysExtension.vertexAttribDivisorANGLE(this.textureIndexAttributeLocation, 1);
-        gl.enableVertexAttribArray(this.textureRepeatAttributeLocation);
-        gl.vertexAttribPointer(this.textureRepeatAttributeLocation, 2, gl.FLOAT, false, 19 * 4, 17 * 4);
-        this.instancedArraysExtension.vertexAttribDivisorANGLE(this.textureRepeatAttributeLocation, 1);
+        // Box vao
+        this.boxVertexArray = this.vertexArrayExtension.createVertexArrayOES();
+        this.vertexArrayExtension.bindVertexArrayOES(this.boxVertexArray);
+        this.boxBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.boxBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+            // Vertex position, Texture position
+            -0.5, -0.5, -0.5,   1, 1, // Front face
+             0.5, -0.5, -0.5,   0, 1,
+             0.5,  0.5, -0.5,   0, 0,
+            -0.5, -0.5, -0.5,   1, 1,
+            -0.5,  0.5, -0.5,   1, 0,
+             0.5,  0.5, -0.5,   0, 0,
+
+            -0.5, -0.5,  0.5,   0, 1, // Back face
+             0.5, -0.5,  0.5,   1, 1,
+             0.5,  0.5,  0.5,   1, 0,
+            -0.5, -0.5,  0.5,   0, 1,
+            -0.5,  0.5,  0.5,   0, 0,
+             0.5,  0.5,  0.5,   1, 0,
+
+            -0.5, -0.5, -0.5,   0, 1, // Left face
+            -0.5, -0.5,  0.5,   1, 1,
+            -0.5,  0.5,  0.5,   1, 0,
+            -0.5, -0.5, -0.5,   0, 1,
+            -0.5,  0.5, -0.5,   0, 0,
+            -0.5,  0.5,  0.5,   1, 0,
+
+             0.5, -0.5, -0.5,   1, 1, // Right face
+             0.5, -0.5,  0.5,   0, 1,
+             0.5,  0.5,  0.5,   0, 0,
+             0.5, -0.5, -0.5,   1, 1,
+             0.5,  0.5, -0.5,   1, 0,
+             0.5,  0.5,  0.5,   0, 0,
+
+            -0.5, -0.5, -0.5,   0, 1, // Bottom face
+             0.5, -0.5, -0.5,   1, 1,
+             0.5, -0.5,  0.5,   1, 0,
+            -0.5, -0.5, -0.5,   0, 1,
+            -0.5, -0.5,  0.5,   0, 0,
+             0.5, -0.5,  0.5,   1, 0,
+
+            -0.5,  0.5,  0.5,   1, 0, // Top face
+             0.5,  0.5,  0.5,   0, 0,
+             0.5,  0.5, -0.5,   0, 1,
+            -0.5,  0.5,  0.5,   1, 0,
+            -0.5,  0.5, -0.5,   1, 1,
+             0.5,  0.5, -0.5,   0, 1
+        ]), gl.STATIC_DRAW);
+        this.bindAttributes(gl);
 
         // Debug label
         this.debugLabel = document.getElementById('debug');
@@ -674,6 +709,32 @@ class Game {
         this.transparentRenderGroups = [];
         this.itemCount = 0;
         this.drawCount = 0;
+    }
+
+    bindAttributes(gl) {
+        // Attributes for the vertex buffer
+        gl.enableVertexAttribArray(this.positionAttributeLocation);
+        gl.vertexAttribPointer(this.positionAttributeLocation, 3, gl.FLOAT, false, 5 * 4, 0);
+
+        gl.enableVertexAttribArray(this.texturePositionAttributeLocation);
+        gl.vertexAttribPointer(this.texturePositionAttributeLocation, 2, gl.FLOAT, false, 5 * 4, 3 * 4);
+
+        // Attributes for the instance buffer
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
+        for (let i = 0; i < 4; i++) {
+            const location = this.matrixAttributeLocation + i;
+            gl.enableVertexAttribArray(location);
+            gl.vertexAttribPointer(location, 4, gl.FLOAT, false, 19 * 4, i * 4 * 4);
+            this.instancedArraysExtension.vertexAttribDivisorANGLE(location, 1);
+        }
+
+        gl.enableVertexAttribArray(this.textureIndexAttributeLocation);
+        gl.vertexAttribPointer(this.textureIndexAttributeLocation, 1, gl.FLOAT, false, 19 * 4, 16 * 4);
+        this.instancedArraysExtension.vertexAttribDivisorANGLE(this.textureIndexAttributeLocation, 1);
+
+        gl.enableVertexAttribArray(this.textureRepeatAttributeLocation);
+        gl.vertexAttribPointer(this.textureRepeatAttributeLocation, 2, gl.FLOAT, false, 19 * 4, 17 * 4);
+        this.instancedArraysExtension.vertexAttribDivisorANGLE(this.textureRepeatAttributeLocation, 1);
     }
 
     keydown(event) {
@@ -732,7 +793,7 @@ class Game {
         const oldChunkY = Math.floor(this.camera.position.z / CHUNK_SIZE);
         if (this.keys['w'] || this.keys['a'] || this.keys['d'] || this.keys['s'] || this.keys[' '] || this.keys['shift']) {
             const update = new Vector4();
-            const moveSpeed = this.camera.position.y == 2 ? 20 : 150;
+            const moveSpeed = this.camera.position.y == 2 ? 20 : 100;
             if (this.keys['w']) update.z -= moveSpeed * delta;
             if (this.keys['s']) update.z += moveSpeed * delta;
             if (this.keys['a']) update.x -= moveSpeed * delta;
@@ -756,7 +817,7 @@ class Game {
 
     // Create render groups for instances
     createRenderGroups(renderGroups, instances) {
-        let renderGroup = { instances: [], data: [], textures: [] };
+        let renderGroup = { type: undefined, instances: [], data: [], textures: [] };
         for (const instance of instances) {
             const object = objectLookup[instance.object_id];
 
@@ -766,23 +827,40 @@ class Game {
                 instance.object3d.updateMatrix();
             }
 
-            // Set matrix and texture repeat
+            // Add texture id to render group textures
             let textureIndex = renderGroup.textures.indexOf(object.texture_id);
             if (textureIndex == -1) {
                 // Go to next render group
                 if (renderGroup.textures.length == this.maxTextureUnits) {
                     renderGroups.push(renderGroup);
-                    renderGroup = { instances: [], data: [], textures: [] };
+                    renderGroup = { type: undefined, instances: [], data: [], textures: [] };
                 }
 
                 renderGroup.textures.push(object.texture_id);
                 textureIndex = renderGroup.textures.length - 1;
             }
 
-            // Go to next render group
+            // Go to next render group when full
             if (renderGroup.instances.length == INSTANCE_BUFFER_SIZE - 1) {
                 renderGroups.push(renderGroup);
-                renderGroup = { instances: [], data: [], textures: [] };
+                renderGroup = { type: undefined, instances: [], data: [], textures: [] };
+            }
+
+            // Give render group its type when missing
+            if (renderGroup.type == undefined) {
+                renderGroup.type = object.type == ObjectType.SPRITE ? ObjectType.PLANE : object.type;
+            }
+
+            // If object type is different go to next render group
+            if (
+                renderGroup.type != object.type &&
+                (
+                    object.type != ObjectType.SPRITE ||
+                    (object.type == ObjectType.SPRITE && renderGroup.type != ObjectType.PLANE)
+                )
+            ) {
+                renderGroups.push(renderGroup);
+                renderGroup = { type: object.type, instances: [], data: [], textures: [] };
             }
 
             // Add matrix and texture data to render group
@@ -877,7 +955,10 @@ class Game {
             }
         }
 
-        // Create opaque render groups for the opaque instances
+        // Sort opaque instances byte type then create opaque render groups for the opaque instances
+        opaqueInstances.sort((a, b) => {
+            return objectLookup[b.object_id].type - objectLookup[a.object_id].type;
+        });
         this.opaqueRenderGroups = [];
         this.createRenderGroups(this.opaqueRenderGroups, opaqueInstances);
 
@@ -904,16 +985,23 @@ class Game {
         this.shader.use();
         gl.uniformMatrix4fv(this.cameraUniformLocation, false, this.camera.matrix.elements);
         gl.enable(gl.DEPTH_TEST);
-        gl.enable(gl.CULL_FACE);
+        // gl.enable(gl.CULL_FACE);
 
         // Set textures to first texture unit indexs
         gl.uniform1iv(this.textureUniformLocation, this.textureUnitIndexes);
 
-        // Select plane vertex stuff
-        this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
-
         // Draw opaque render groups
         for (const renderGroup of this.opaqueRenderGroups) {
+            let vertexCount;
+            if (renderGroup.type == ObjectType.PLANE) {
+                this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
+                vertexCount = 6;
+            }
+            if (renderGroup.type == ObjectType.BOX) {
+                this.vertexArrayExtension.bindVertexArrayOES(this.boxVertexArray);
+                vertexCount = 36;
+            }
+
             gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
             gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(renderGroup.data));
 
@@ -922,12 +1010,13 @@ class Game {
                 gl.bindTexture(gl.TEXTURE_2D, textureLookup[renderGroup.textures[i]].texture);
             }
 
-            this.instancedArraysExtension.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 6, renderGroup.instances.length);
+            this.instancedArraysExtension.drawArraysInstancedANGLE(gl.TRIANGLES, 0, vertexCount, renderGroup.instances.length);
             this.itemCount += renderGroup.instances.length;
             this.drawCount++;
         }
 
         // Draw transparent render groups
+        this.vertexArrayExtension.bindVertexArrayOES(this.planeVertexArray);
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
         for (const renderGroup of this.transparentRenderGroups) {

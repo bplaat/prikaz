@@ -21,8 +21,9 @@ const MessageType = {
 };
 
 const ObjectType = {
-    SPRITE: 1,
-    PLANE: 2
+    PLANE: 1,
+    SPRITE: 2,
+    BOX: 3
 };
 
 // World generation
@@ -39,7 +40,8 @@ const textures = [
     { id: 10, name: 'Sandcastle', image: 'sandcastle.png', pixelated: false, transparent: true },
     { id: 11, name: 'Campfire', image: 'campfire.png', pixelated: false, transparent: true },
     { id: 12, name: 'Statue', image: 'statue.png', pixelated: true, transparent: true },
-    { id: 13, name: 'Streetlight', image: 'streetlight.png', pixelated: false, transparent: true }
+    { id: 13, name: 'Streetlight', image: 'streetlight.png', pixelated: false, transparent: true },
+    { id: 14, name: 'Crate', image: 'crate.jpg', pixelated: false, transparent: false }
 ];
 
 const objects = [
@@ -55,7 +57,8 @@ const objects = [
     { id: 10, type: ObjectType.SPRITE, name: 'Sandcastle', width: 1.5, height: 1.5, depth: 0, texture_id: 10, texture_repeat_x: 1, texture_repeat_y: 1 },
     { id: 11, type: ObjectType.SPRITE, name: 'Campfire', width: 2, height: 2, depth: 0, texture_id: 11, texture_repeat_x: 1, texture_repeat_y: 1 },
     { id: 12, type: ObjectType.SPRITE, name: 'Statue', width: 4, height: 4, depth: 0, texture_id: 12, texture_repeat_x: 1, texture_repeat_y: 1 },
-    { id: 13, type: ObjectType.SPRITE, name: 'Streetlight', width: 6, height: 6, depth: 0, texture_id: 13, texture_repeat_x: 1, texture_repeat_y: 1 }
+    { id: 13, type: ObjectType.SPRITE, name: 'Streetlight', width: 6, height: 6, depth: 0, texture_id: 13, texture_repeat_x: 1, texture_repeat_y: 1 },
+    { id: 14, type: ObjectType.BOX, name: 'Crate', width: 1.5, height: 1.5, depth: 1.5, texture_id: 14, texture_repeat_x: 1, texture_repeat_y: 1 }
 ];
 
 const world = {
@@ -79,7 +82,7 @@ function createChunk(x, y) {
         chunk_id: chunk.id,
         object_id: terrain,
         position_x: x * CHUNK_SIZE + CHUNK_SIZE / 2,
-        position_y: -CHUNK_SIZE / 2,
+        position_y: -CHUNK_SIZE / 2 - 0.001,
         position_z: y * CHUNK_SIZE + CHUNK_SIZE / 2,
         rotation_x: -Math.PI / 2, rotation_y: 0,  rotation_z: 0,
         scale_x: 1, scale_y: 1, scale_z: 1
@@ -105,7 +108,7 @@ function createChunk(x, y) {
             world.instances.push({
                 id: world.instances.length + 1,
                 chunk_id: chunk.id,
-                object_id: rand(n > 0.6 ? 4 : 7, rand(9, 13)),
+                object_id: rand(n > 0.6 ? 4 : 7, rand(9, 14)),
                 position_x: x * CHUNK_SIZE + rand(0, CHUNK_SIZE),
                 position_y: 0,
                 position_z: y * CHUNK_SIZE + rand(0, CHUNK_SIZE),
