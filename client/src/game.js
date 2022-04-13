@@ -238,19 +238,23 @@ class Connection {
 }
 
 export default class Game {
-    constructor({ canvas }) {
+    constructor({ canvas, debugLabel }) {
         this.canvas = canvas;
         this.gl = this.canvas.getContext('webgl');
         this.vertexArrayExtension = this.gl.getExtension('OES_vertex_array_object');
         this.instancedArraysExtension = this.gl.getExtension('ANGLE_instanced_arrays');
-        this.pixelRatio = document.pixelRatio || 1;
+        this.debugLabel = debugLabel;
         window.addEventListener('resize', this.resize.bind(this));
         this.resize();
     }
 
     resize() {
-        this.canvas.width = window.innerWidth * this.pixelRatio;
-        this.canvas.height = window.innerHeight * this.pixelRatio;
+        this.pixelRatio = window.devicePixelRatio;
+        this.width = window.innerWidth * this.pixelRatio;
+        this.height = window.innerHeight * this.pixelRatio;
+
+        this.canvas.width = this.width;
+        this.canvas.height = this.height;
         this.canvas.style.width = `${window.innerWidth}px`;
         this.canvas.style.height = `${window.innerHeight}px`;
 
@@ -399,9 +403,6 @@ export default class Game {
         ]), gl.STATIC_DRAW);
         this.bindAttributes(gl);
 
-        // Debug label
-        this.debugLabel = document.getElementById('debug');
-
         // Stats
         this.stats = new Stats();
         this.stats.dom.style.top = '';
@@ -499,6 +500,7 @@ export default class Game {
     updateDebugLabel() {
         this.debugLabel.innerHTML = `
             v${VERSION.MAJOR}.${VERSION.MINOR}.${VERSION.BUGFIX} -
+            ${this.width}x${this.height}@${this.pixelRatio} -
             Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
             ${this.camera.rotation.x.toFixed(3)}x${this.camera.rotation.y.toFixed(3)}x${this.camera.rotation.z.toFixed(3)} -
             Chunk: ${Math.floor(this.camera.position.x / CHUNK_SIZE)}x${Math.floor(this.camera.position.z / CHUNK_SIZE)} -
@@ -519,7 +521,7 @@ export default class Game {
         const oldChunkY = Math.floor(this.camera.position.z / CHUNK_SIZE);
         if (this.keys['w'] || this.keys['a'] || this.keys['d'] || this.keys['s'] || this.keys[' '] || this.keys['shift']) {
             const update = new Vector4();
-            const moveSpeed = this.camera.position.y == 2 ? 20 : 100;
+            const moveSpeed = this.camera.position.y == 2 ? 25 : (this.camera.position.y > 75 ? 150 : 75);
             if (this.keys['w']) update.z -= moveSpeed * delta;
             if (this.keys['s']) update.z += moveSpeed * delta;
             if (this.keys['a']) update.x -= moveSpeed * delta;

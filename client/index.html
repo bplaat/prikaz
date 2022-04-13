@@ -7,14 +7,14 @@
     <script src="stats.min.js"></script>
     <style>
     body{font-family:Consolas,monospace;font-size:16px;line-height:1.5}
-    body{margin:0;background-color:#000;overflow:hidden}
-    #canvas{display:block}#debug{position:absolute;top:0;left:0;padding:8px 16px;color:#111}
+    body{margin:0;background-color:#000;overflow:hidden}#canvas{display:block}
+    #debug-label{position:absolute;top:0;left:0;padding:8px 16px;color:#111}
     #crosshair{position:absolute;top:0;left:0;right:0;bottom:0;margin:auto}
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
-    <div id="debug"></div>
+    <div id="debug-label"></div>
     <svg id="crosshair" width="24" height="24">
         <rect fill="rgba(255, 255, 255, 0.9)" x="0" y="10" width="24" height="4" />
         <rect fill="rgba(255, 255, 255, 0.9)" x="10" y="0" width="4" height="24" />
@@ -22,7 +22,10 @@
 
     <script type="module">
         import Game from './src/game.js';
-        const game = new Game({ canvas: document.getElementById('canvas') });
+        const game = new Game({
+            canvas: document.getElementById('canvas'),
+            debugLabel: document.getElementById('debug-label')
+        });
         game.start();
     </script>
 </body>
