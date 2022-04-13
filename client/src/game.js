@@ -95,6 +95,7 @@ class Connection {
                     image.onload = () => {
                         texture.texture = gl.createTexture();
                         gl.bindTexture(gl.TEXTURE_2D, texture.texture);
+                        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
                         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, texture.pixelated ? gl.NEAREST_MIPMAP_NEAREST : gl.LINEAR_MIPMAP_LINEAR);
                         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, texture.pixelated ? gl.NEAREST : gl.LINEAR);
                         if (texture.transparent) {
@@ -342,13 +343,13 @@ export default class Game {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.planeBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
             // Vertex position, Texture position
-            -0.5, -0.5, 0,   0, 1,
-             0.5, -0.5, 0,   1, 1,
-             0.5,  0.5, 0,   1, 0,
+            -0.5, -0.5, 0,   0, 0,
+             0.5, -0.5, 0,   1, 0,
+             0.5,  0.5, 0,   1, 1,
 
-            -0.5, -0.5, 0,   0, 1,
-             0.5,  0.5, 0,   1, 0,
-            -0.5,  0.5, 0,   0, 0
+            -0.5, -0.5, 0,   0, 0,
+             0.5,  0.5, 0,   1, 1,
+            -0.5,  0.5, 0,   0, 1
         ]), gl.STATIC_DRAW);
         this.bindAttributes(gl);
 
@@ -359,47 +360,47 @@ export default class Game {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.boxBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
             // Vertex position, Texture position
-            -0.5, -0.5, -0.5,   1, 1, // Front face
-             0.5, -0.5, -0.5,   0, 1,
-             0.5,  0.5, -0.5,   0, 0,
-            -0.5, -0.5, -0.5,   1, 1,
-            -0.5,  0.5, -0.5,   1, 0,
-             0.5,  0.5, -0.5,   0, 0,
-
-            -0.5, -0.5,  0.5,   0, 1, // Back face
-             0.5, -0.5,  0.5,   1, 1,
-             0.5,  0.5,  0.5,   1, 0,
-            -0.5, -0.5,  0.5,   0, 1,
-            -0.5,  0.5,  0.5,   0, 0,
-             0.5,  0.5,  0.5,   1, 0,
-
-            -0.5, -0.5, -0.5,   0, 1, // Left face
-            -0.5, -0.5,  0.5,   1, 1,
-            -0.5,  0.5,  0.5,   1, 0,
-            -0.5, -0.5, -0.5,   0, 1,
-            -0.5,  0.5, -0.5,   0, 0,
-            -0.5,  0.5,  0.5,   1, 0,
-
-             0.5, -0.5, -0.5,   1, 1, // Right face
-             0.5, -0.5,  0.5,   0, 1,
-             0.5,  0.5,  0.5,   0, 0,
-             0.5, -0.5, -0.5,   1, 1,
-             0.5,  0.5, -0.5,   1, 0,
-             0.5,  0.5,  0.5,   0, 0,
-
-            -0.5, -0.5, -0.5,   0, 1, // Bottom face
-             0.5, -0.5, -0.5,   1, 1,
-             0.5, -0.5,  0.5,   1, 0,
-            -0.5, -0.5, -0.5,   0, 1,
-            -0.5, -0.5,  0.5,   0, 0,
-             0.5, -0.5,  0.5,   1, 0,
-
-            -0.5,  0.5,  0.5,   1, 0, // Top face
-             0.5,  0.5,  0.5,   0, 0,
+            -0.5, -0.5, -0.5,   1, 0, // Front face
+             0.5, -0.5, -0.5,   0, 0,
              0.5,  0.5, -0.5,   0, 1,
-            -0.5,  0.5,  0.5,   1, 0,
+            -0.5, -0.5, -0.5,   1, 0,
             -0.5,  0.5, -0.5,   1, 1,
-             0.5,  0.5, -0.5,   0, 1
+             0.5,  0.5, -0.5,   0, 1,
+
+            -0.5, -0.5,  0.5,   0, 0, // Back face
+             0.5, -0.5,  0.5,   1, 0,
+             0.5,  0.5,  0.5,   1, 1,
+            -0.5, -0.5,  0.5,   0, 0,
+            -0.5,  0.5,  0.5,   0, 1,
+             0.5,  0.5,  0.5,   1, 1,
+
+            -0.5, -0.5, -0.5,   0, 0, // Left face
+            -0.5, -0.5,  0.5,   1, 0,
+            -0.5,  0.5,  0.5,   1, 1,
+            -0.5, -0.5, -0.5,   0, 0,
+            -0.5,  0.5, -0.5,   0, 1,
+            -0.5,  0.5,  0.5,   1, 1,
+
+             0.5, -0.5, -0.5,   1, 0, // Right face
+             0.5, -0.5,  0.5,   0, 0,
+             0.5,  0.5,  0.5,   0, 1,
+             0.5, -0.5, -0.5,   1, 0,
+             0.5,  0.5, -0.5,   1, 1,
+             0.5,  0.5,  0.5,   0, 1,
+
+            -0.5, -0.5, -0.5,   0, 0, // Bottom face
+             0.5, -0.5, -0.5,   1, 0,
+             0.5, -0.5,  0.5,   1, 1,
+            -0.5, -0.5, -0.5,   0, 0,
+            -0.5, -0.5,  0.5,   0, 1,
+             0.5, -0.5,  0.5,   1, 1,
+
+            -0.5,  0.5,  0.5,   1, 1, // Top face
+             0.5,  0.5,  0.5,   0, 1,
+             0.5,  0.5, -0.5,   0, 0,
+            -0.5,  0.5,  0.5,   1, 1,
+            -0.5,  0.5, -0.5,   1, 0,
+             0.5,  0.5, -0.5,   0, 0
         ]), gl.STATIC_DRAW);
         this.bindAttributes(gl);
 
