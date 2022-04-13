@@ -1,4 +1,5 @@
 {
+  "type": "module",
   "name": "prikaz-server",
   "version": "0.1.0",
   "description": "The server for the Prikaz game",

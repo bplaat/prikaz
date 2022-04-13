@@ -1,314 +1,9 @@
-// Utils
-function now() {
-    return 'performance' in window ? performance.now() : Date.now();
-}
-
-function formatBytes(bytes) {
-    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MiB';
-    if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KiB';
-    return bytes + ' B';
-}
-
-// Math
-function degrees(radians) {
-    return radians * 180 / Math.PI;
-}
-
-function radians(degrees) {
-    return degrees * Math.PI / 180;
-}
-
-class Matrix4 {
-    constructor(elements) {
-        this.elements = elements;
-    }
-
-    clone() {
-        return new Matrix4(this.elements);
-    }
-
-    mul(matrix) {
-        const b00 = matrix.elements[0 * 4 + 0];
-        const b01 = matrix.elements[0 * 4 + 1];
-        const b02 = matrix.elements[0 * 4 + 2];
-        const b03 = matrix.elements[0 * 4 + 3];
-        const b10 = matrix.elements[1 * 4 + 0];
-        const b11 = matrix.elements[1 * 4 + 1];
-        const b12 = matrix.elements[1 * 4 + 2];
-        const b13 = matrix.elements[1 * 4 + 3];
-        const b20 = matrix.elements[2 * 4 + 0];
-        const b21 = matrix.elements[2 * 4 + 1];
-        const b22 = matrix.elements[2 * 4 + 2];
-        const b23 = matrix.elements[2 * 4 + 3];
-        const b30 = matrix.elements[3 * 4 + 0];
-        const b31 = matrix.elements[3 * 4 + 1];
-        const b32 = matrix.elements[3 * 4 + 2];
-        const b33 = matrix.elements[3 * 4 + 3];
-        const a00 = this.elements[0 * 4 + 0];
-        const a01 = this.elements[0 * 4 + 1];
-        const a02 = this.elements[0 * 4 + 2];
-        const a03 = this.elements[0 * 4 + 3];
-        const a10 = this.elements[1 * 4 + 0];
-        const a11 = this.elements[1 * 4 + 1];
-        const a12 = this.elements[1 * 4 + 2];
-        const a13 = this.elements[1 * 4 + 3];
-        const a20 = this.elements[2 * 4 + 0];
-        const a21 = this.elements[2 * 4 + 1];
-        const a22 = this.elements[2 * 4 + 2];
-        const a23 = this.elements[2 * 4 + 3];
-        const a30 = this.elements[3 * 4 + 0];
-        const a31 = this.elements[3 * 4 + 1];
-        const a32 = this.elements[3 * 4 + 2];
-        const a33 = this.elements[3 * 4 + 3];
-
-        this.elements = [
-            b00 * a00 + b01 * a10 + b02 * a20 + b03 * a30,
-            b00 * a01 + b01 * a11 + b02 * a21 + b03 * a31,
-            b00 * a02 + b01 * a12 + b02 * a22 + b03 * a32,
-            b00 * a03 + b01 * a13 + b02 * a23 + b03 * a33,
-            b10 * a00 + b11 * a10 + b12 * a20 + b13 * a30,
-            b10 * a01 + b11 * a11 + b12 * a21 + b13 * a31,
-            b10 * a02 + b11 * a12 + b12 * a22 + b13 * a32,
-            b10 * a03 + b11 * a13 + b12 * a23 + b13 * a33,
-            b20 * a00 + b21 * a10 + b22 * a20 + b23 * a30,
-            b20 * a01 + b21 * a11 + b22 * a21 + b23 * a31,
-            b20 * a02 + b21 * a12 + b22 * a22 + b23 * a32,
-            b20 * a03 + b21 * a13 + b22 * a23 + b23 * a33,
-            b30 * a00 + b31 * a10 + b32 * a20 + b33 * a30,
-            b30 * a01 + b31 * a11 + b32 * a21 + b33 * a31,
-            b30 * a02 + b31 * a12 + b32 * a22 + b33 * a32,
-            b30 * a03 + b31 * a13 + b32 * a23 + b33 * a33,
-        ];
-        return this;
-    }
-
-    static identity() {
-        return new Matrix4([
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1
-        ]);
-    }
-
-    static orthographic(left, right, bottom, top, near, far) {
-        return new Matrix4([
-            2 / (right - left), 0, 0, 0,
-            0, 2 / (top - bottom), 0, 0,
-            0, 0, 2 / (near - far), 0,
-            (left + right) / (left - right),
-            (bottom + top) / (bottom - top),
-            (near + far) / (near - far),
-            1
-        ]);
-    }
-
-    static perspective(fov, aspect, near, far) {
-        const f = Math.tan(Math.PI * 0.5 - 0.5 * fov);
-        const r = 1.0 / (near - far);
-        return new Matrix4([
-            f / aspect, 0, 0, 0,
-            0, f, 0, 0,
-            0, 0, (near + far) * r, -1,
-            0, 0, near * far * r * 2, 0
-        ]);
-    }
-
-    static translate(x, y, z) {
-        return new Matrix4([
-            1, 0, 0, 0,
-            0, 1, 0, 0,
-            0, 0, 1, 0,
-            x, y, z, 1
-        ]);
-    }
-
-    static rotateX(x) {
-        const c = Math.cos(x);
-        const s = Math.sin(x);
-        return new Matrix4([
-            1, 0, 0, 0,
-            0, c, s, 0,
-            0, -s, c, 0,
-            0, 0, 0, 1
-        ]);
-    }
-
-    static rotateY(y) {
-        const c = Math.cos(y);
-        const s = Math.sin(y);
-        return new Matrix4([
-            c, 0, -s, 0,
-            0, 1, 0, 0,
-            s, 0, c, 0,
-            0, 0, 0, 1
-        ]);
-    }
-
-    static rotateZ(z) {
-        const c = Math.cos(z);
-        const s = Math.sin(z);
-        return new Matrix4([
-            c, s, 0, 0,
-            -s, c, 0, 0,
-            0, 0, 1, 0,
-            0, 0, 0, 1
-        ]);
-    }
-
-    static scale(x, y, z) {
-        return new Matrix4([
-            x, 0, 0, 0,
-            0, y, 0, 0,
-            0, 0, z, 0,
-            0, 0, 0, 1
-        ]);
-    }
-}
-
-
-class Vector4 {
-    constructor(x = 0, y = 0, z = 0, w = 1) {
-        this.x = x;
-        this.y = y;
-        this.z = z;
-        this.w = w;
-    }
-
-    clone() {
-        return new Vector4(this.x, this.y, this.z, this.w);
-    }
-
-    add(vector) {
-        this.x += vector.x;
-        this.y += vector.y;
-        this.z += vector.z;
-        this.w += vector.w;
-        return this;
-    }
-
-    sub(vector) {
-        this.x -= vector.x;
-        this.y -= vector.y;
-        this.z -= vector.z;
-        this.w -= vector.w;
-        return this;
-    }
-
-    mul(rhs) {
-        if (rhs instanceof Vector4) {
-            this.x *= rhs.x;
-            this.y *= rhs.y;
-            this.z *= rhs.z;
-            this.w *= rhs.w;
-        }
-        if (rhs instanceof Matrix4) {
-            const x = rhs.elements[0 * 4 + 0] * this.x + rhs.elements[0 * 4 + 1] * this.y + rhs.elements[0 * 4 + 2] * this.z + rhs.elements[0 * 4 + 3] * this.w;
-            const y = rhs.elements[1 * 4 + 0] * this.x + rhs.elements[1 * 4 + 1] * this.y + rhs.elements[1 * 4 + 2] * this.z + rhs.elements[1 * 4 + 3] * this.w;
-            const z = rhs.elements[2 * 4 + 0] * this.x + rhs.elements[2 * 4 + 1] * this.y + rhs.elements[2 * 4 + 2] * this.z + rhs.elements[2 * 4 + 3] * this.w;
-            const w = rhs.elements[3 * 4 + 0] * this.x + rhs.elements[3 * 4 + 1] * this.y + rhs.elements[3 * 4 + 2] * this.z + rhs.elements[3 * 4 + 3] * this.w;
-            this.x = x;
-            this.y = y;
-            this.z = z;
-            this.w = w;
-        }
-        return this;
-    }
-
-    div(vector) {
-        this.x /= vector.x;
-        this.y /= vector.y;
-        this.z /= vector.z;
-        this.w /= vector.w;
-        return this;
-    }
-
-    dist(vector) {
-        return Math.sqrt((this.x - vector.x) ** 2 + (this.y - vector.y) ** 2 + (this.z - vector.z) ** 2);
-    }
-}
-
-// 3D objects
-class Object3D {
-    constructor() {
-        this.position = new Vector4();
-        this.rotation = new Vector4();
-        this.scale = new Vector4(1, 1, 1);
-    }
-
-    updateMatrix() {
-        this.matrix = Matrix4.translate(this.position.x, this.position.y, this.position.z)
-            .mul(Matrix4.rotateX(this.rotation.x))
-            .mul(Matrix4.rotateY(this.rotation.y))
-            .mul(Matrix4.rotateZ(this.rotation.z))
-            .mul(Matrix4.scale(this.scale.x, this.scale.y, this.scale.z));
-    }
-}
-
-class PerspectiveCamera extends Object3D {
-    constructor(fov, aspect, near, far) {
-        super();
-        this.fov = fov;
-        this.aspect = aspect;
-        this.near = near;
-        this.far = far;
-    }
-
-    updateMatrix() {
-        this.matrix = Matrix4.perspective(this.fov, this.aspect, this.near, this.far)
-            .mul(Matrix4.rotateX(this.rotation.x))
-            .mul(Matrix4.rotateY(this.rotation.y))
-            .mul(Matrix4.rotateZ(this.rotation.z))
-            .mul(Matrix4.translate(-this.position.x, -this.position.y, -this.position.z));
-    }
-}
-
-// WebGL stuff
-class Shader {
-    constructor(gl, vertexShaderSource, fragmentShaderSource) {
-        this.gl = gl;
-        const vertexShader = this.createShader(gl.VERTEX_SHADER, vertexShaderSource);
-        const fragmentShader = this.createShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
-        this.program = this.createProgram(vertexShader, fragmentShader);
-    }
-
-    createShader(type, source) {
-        const shader = this.gl.createShader(type);
-        this.gl.shaderSource(shader, source);
-        this.gl.compileShader(shader);
-        const success = this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS);
-        if (success) return shader;
-        console.log(this.gl.getShaderInfoLog(shader));
-        this.gl.deleteShader(shader);
-    }
-
-    createProgram(vertexShader, fragmentShader) {
-        const program = this.gl.createProgram();
-        this.gl.attachShader(program, vertexShader);
-        this.gl.attachShader(program, fragmentShader);
-        this.gl.linkProgram(program);
-        const success = this.gl.getProgramParameter(program, this.gl.LINK_STATUS);
-        if (success) return program;
-        console.log(this.gl.getProgramInfoLog(program));
-        this.gl.deleteProgram(program);
-    }
-
-    getAttribLocation(name) {
-        return this.gl.getAttribLocation(this.program, name);
-    }
-
-    getUniformLocation(name) {
-        return this.gl.getUniformLocation(this.program, name);
-    }
-
-    use() {
-        this.gl.useProgram(this.program);
-    }
-}
-
-// Game
+import { Object3D, PerspectiveCamera } from './object3d.js';
+import { formatBytes, createShader, createProgram } from './utils.js';
+import { radians, Matrix4, Vector4 } from './math.js';
 
 // Constants
+const VERSION = { MAJOR: undefined, MINOR: undefined, BUGFIX: undefined };
 let CHUNK_SIZE;
 let TICKS_PER_SECOND;
 let TICKS_PER_DAY;
@@ -375,6 +70,9 @@ class Connection {
 
             // Parse world info response message
             if (type == MessageType.WORLD_INFO) {
+                VERSION.MAJOR = messageView.getUint8(pos); pos += 1;
+                VERSION.MINOR = messageView.getUint8(pos); pos += 1;
+                VERSION.BUGFIX = messageView.getUint8(pos); pos += 1;
                 CHUNK_SIZE = messageView.getUint16(pos, true); pos += 2;
                 TICKS_PER_SECOND = messageView.getUint16(pos, true); pos += 2;
                 TICKS_PER_DAY = messageView.getUint16(pos, true); pos += 2;
@@ -539,9 +237,9 @@ class Connection {
     }
 }
 
-class Game {
-    constructor() {
-        this.canvas = document.getElementById('canvas');
+export default class Game {
+    constructor({ canvas }) {
+        this.canvas = canvas;
         this.gl = this.canvas.getContext('webgl');
         this.vertexArrayExtension = this.gl.getExtension('OES_vertex_array_object');
         this.instancedArraysExtension = this.gl.getExtension('ANGLE_instanced_arrays');
@@ -578,8 +276,8 @@ class Game {
         for (let i = 0; i < this.maxTextureUnits; i++) this.textureUnitIndexes.push(i);
 
         // Create default instance drawing shader
-        this.shader = new Shader(gl,
-            `attribute vec4 a_position;
+        const vertexShader = createShader(gl, gl.VERTEX_SHADER, `
+            attribute vec4 a_position;
             attribute vec2 a_texture_position;
             attribute mat4 a_matrix;
             attribute float a_texture_index;
@@ -594,9 +292,11 @@ class Game {
                 gl_Position = u_camera * a_matrix * a_position;
                 v_texture_index = a_texture_index;
                 v_texture_position = a_texture_position * a_texture_repeat;
-            }`,
+            }
+        `);
 
-            `precision mediump float;
+        const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, `
+            precision mediump float;
 
             uniform sampler2D u_texture[${this.maxTextureUnits}];
             uniform float u_lightness;
@@ -607,19 +307,24 @@ class Game {
             void main() {
                 for (int i = 0; i < ${this.maxTextureUnits}; i++) {
                     if (int(v_texture_index) == i) {
-                        gl_FragColor = texture2D(u_texture[i], v_texture_position) * vec4(u_lightness, u_lightness, u_lightness, 1);
+                        gl_FragColor = texture2D(u_texture[i], v_texture_position) *
+                            vec4(u_lightness, u_lightness, u_lightness, 1);
                     }
                 }
-            }`
-        );
-        this.positionAttributeLocation = this.shader.getAttribLocation('a_position');
-        this.texturePositionAttributeLocation = this.shader.getAttribLocation('a_texture_position');
-        this.matrixAttributeLocation = this.shader.getAttribLocation('a_matrix');
-        this.textureIndexAttributeLocation = this.shader.getAttribLocation('a_texture_index');
-        this.textureRepeatAttributeLocation = this.shader.getAttribLocation('a_texture_repeat');
-        this.cameraUniformLocation = this.shader.getUniformLocation('u_camera');
-        this.textureUniformLocation = this.shader.getUniformLocation('u_texture');
-        this.lightnessUniformLocation = this.shader.getUniformLocation('u_lightness');
+            }
+        `);
+
+        this.program = createProgram(gl, vertexShader, fragmentShader);
+
+        // Get program locations
+        this.positionAttributeLocation = gl.getAttribLocation(this.program, 'a_position');
+        this.texturePositionAttributeLocation = gl.getAttribLocation(this.program, 'a_texture_position');
+        this.matrixAttributeLocation = gl.getAttribLocation(this.program, 'a_matrix');
+        this.textureIndexAttributeLocation = gl.getAttribLocation(this.program, 'a_texture_index');
+        this.textureRepeatAttributeLocation = gl.getAttribLocation(this.program, 'a_texture_repeat');
+        this.cameraUniformLocation = gl.getUniformLocation(this.program, 'u_camera');
+        this.textureUniformLocation = gl.getUniformLocation(this.program, 'u_texture');
+        this.lightnessUniformLocation = gl.getUniformLocation(this.program, 'u_lightness');
 
         // Instance buffer
         this.instanceBuffer = gl.createBuffer();
@@ -633,13 +338,13 @@ class Game {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.planeBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
             // Vertex position, Texture position
-            -0.5, -0.5, -0.5,   0, 1,
-             0.5, -0.5, -0.5,   1, 1,
-             0.5,  0.5, -0.5,   1, 0,
+            -0.5, -0.5, 0,   0, 1,
+             0.5, -0.5, 0,   1, 1,
+             0.5,  0.5, 0,   1, 0,
 
-            -0.5, -0.5, -0.5,   0, 1,
-             0.5,  0.5, -0.5,   1, 0,
-            -0.5,  0.5, -0.5,   0, 0
+            -0.5, -0.5, 0,   0, 1,
+             0.5,  0.5, 0,   1, 0,
+            -0.5,  0.5, 0,   0, 0
         ]), gl.STATIC_DRAW);
         this.bindAttributes(gl);
 
@@ -792,7 +497,9 @@ class Game {
     }
 
     updateDebugLabel() {
-        this.debugLabel.innerHTML = `Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
+        this.debugLabel.innerHTML = `
+            v${VERSION.MAJOR}.${VERSION.MINOR}.${VERSION.BUGFIX} -
+            Camera: ${this.camera.position.x.toFixed(3)}x${this.camera.position.y.toFixed(3)}x${this.camera.position.z.toFixed(3)}
             ${this.camera.rotation.x.toFixed(3)}x${this.camera.rotation.y.toFixed(3)}x${this.camera.rotation.z.toFixed(3)} -
             Chunk: ${Math.floor(this.camera.position.x / CHUNK_SIZE)}x${Math.floor(this.camera.position.z / CHUNK_SIZE)} -
             Chunks: ${world.chunks.length} -
@@ -803,7 +510,8 @@ class Game {
             Dist: ${CHUNK_RENDER_RANGE} -
             Send: ${formatBytes(this.con.sendBytes)} / ${this.con.sendCount} -
             Received: ${formatBytes(this.con.receiveBytes)} / ${this.con.receiveCount} -
-            Draws: ${this.itemCount} / ${this.drawCount}`;
+            Draws: ${this.itemCount} / ${this.drawCount}
+        `;
     }
 
     update(delta) {
@@ -1004,10 +712,9 @@ class Game {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
         // Use default shader and set camera matrix
-        this.shader.use();
+        gl.useProgram(this.program);
         gl.uniformMatrix4fv(this.cameraUniformLocation, false, this.camera.matrix.elements);
         gl.enable(gl.DEPTH_TEST);
-        // gl.enable(gl.CULL_FACE);
 
         // Set global lightness value
         gl.uniform1f(this.lightnessUniformLocation, this.lightness);
@@ -1063,7 +770,7 @@ class Game {
     loop() {
         window.requestAnimationFrame(this.loop.bind(this));
         this.stats.begin();
-        const time = now();
+        const time = window.performance.now();
         this.update((time - this.oldTime) / 1000);
         this.oldTime = time;
         this.render(this.gl);
@@ -1073,10 +780,7 @@ class Game {
 
     start() {
         this.init(this.gl);
-        this.oldTime = now();
+        this.oldTime = window.performance.now();
         this.loop();
     }
 }
-
-const game = new Game();
-game.start();

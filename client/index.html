@@ -6,8 +6,9 @@
     <title>Prikaz</title>
     <script src="stats.min.js"></script>
     <style>
-    body{font-family:Consolas,monospace;font-size:16px;line-height:1;margin:0;background-color:#000}
-    #canvas{display:block}#debug{position:absolute;top:0;left:0;padding:8px;color:#111}
+    body{font-family:Consolas,monospace;font-size:16px;line-height:1.5}
+    body{margin:0;background-color:#000;overflow:hidden}
+    #canvas{display:block}#debug{position:absolute;top:0;left:0;padding:8px 16px;color:#111}
     #crosshair{position:absolute;top:0;left:0;right:0;bottom:0;margin:auto}
     </style>
 </head>
@@ -18,6 +19,11 @@
         <rect fill="rgba(255, 255, 255, 0.9)" x="0" y="10" width="24" height="4" />
         <rect fill="rgba(255, 255, 255, 0.9)" x="10" y="0" width="4" height="24" />
     </svg>
-    <script src="game.js"></script>
+
+    <script type="module">
+        import Game from './src/game.js';
+        const game = new Game({ canvas: document.getElementById('canvas') });
+        game.start();
+    </script>
 </body>
 </html>

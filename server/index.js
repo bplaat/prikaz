@@ -1,6 +1,6 @@
-const http = require('http');
-const fs = require('fs');
-const { WebSocketServer } = require('ws');
+import http  from 'http';
+import fs  from 'fs';
+import { WebSocketServer } from 'ws';
 
 // Noise.js
 let noise = {};
@@ -11,8 +11,17 @@ function rand(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+// Parse game version
+const packageJson = JSON.parse(fs.readFileSync('package.json'));
+const versionParts = packageJson.version.split('.');
+const VERSION = {
+    MAJOR: parseInt(versionParts[0]),
+    MINOR: parseInt(versionParts[1]),
+    BUGFIX: parseInt(versionParts[2])
+};
+
 // Constants
-const PORT = process.env.PORT || 8080;
+const SERVER_PORT = process.env.PORT || 8080;
 const CHUNK_SIZE = 32;
 const TICKS_PER_SECOND = 5;
 const TICKS_PER_DAY = TICKS_PER_SECOND * 10 * 60;
@@ -190,7 +199,7 @@ wss.on('connection', ws => {
         let responseSize = 0;
         for (const item of responses) {
             if (item.type == MessageType.WORLD_INFO) {
-                responseSize += 1 + 2 * 3 + 4 + 4 + textures.length * (4 + 1 + 1) +
+                responseSize += 1 + 3 + 2 * 3 + 4 + 4 + textures.length * (4 + 1 + 1) +
                     4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2);
             }
             if (item.type == MessageType.WORLD_CHUNK) {
@@ -206,6 +215,9 @@ wss.on('connection', ws => {
             // Send world info response response
             if (item.type == MessageType.WORLD_INFO) {
                 responseView.setUint8(pos, MessageType.WORLD_INFO); pos += 1;
+                responseView.setUint8(pos, VERSION.MAJOR); pos += 1;
+                responseView.setUint8(pos, VERSION.MINOR); pos += 1;
+                responseView.setUint8(pos, VERSION.BUGFIX); pos += 1;
                 responseView.setUint16(pos, CHUNK_SIZE, true); pos += 2;
                 responseView.setUint16(pos, TICKS_PER_SECOND, true); pos += 2;
                 responseView.setUint16(pos, TICKS_PER_DAY, true); pos += 2;
@@ -266,8 +278,8 @@ wss.on('connection', ws => {
 
 // HTTP server
 const server = http.createServer((req, res) => {
-    const { pathname } = new URL(req.url, `http://localhost:${PORT}/`);
-    console.log(`[WEB] ${req.method} ${pathname}`);
+    const { pathname } = new URL(req.url, `http://localhost:${SERVER_PORT}/`);
+    console.log(`[HTTP] ${req.method} ${pathname}`);
 
     if (pathname == '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -293,16 +305,19 @@ const server = http.createServer((req, res) => {
 });
 
 server.on('upgrade', (req, socket, head) => {
-    const { pathname } = new URL(req.url, `http://localhost:${PORT}/`);
+    const { pathname } = new URL(req.url, `http://localhost:${SERVER_PORT}/`);
+    console.log(`[HTTP] ${req.method} UPGRADE ${pathname}`);
+
     if (pathname === '/ws') {
         wss.handleUpgrade(req, socket, head, ws => {
             wss.emit('connection', ws, req);
         });
-    } else {
-        socket.destroy();
+        return;
     }
+
+    socket.destroy();
 });
 
-server.listen(PORT, () => {
-    console.log(`[WEB] Server is listening on http://localhost:${PORT}/`);
+server.listen(SERVER_PORT, () => {
+    console.log(`[HTTP] Server is listening on http://localhost:${SERVER_PORT}/`);
 });
