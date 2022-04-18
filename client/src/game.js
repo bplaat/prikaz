@@ -574,19 +574,6 @@ export default class Game {
                 instance.object3d.updateMatrix();
             }
 
-            // Add texture id to render group textures
-            let textureIndex = renderGroup.textures.indexOf(object.texture_id);
-            if (textureIndex == -1) {
-                // Go to next render group
-                if (renderGroup.textures.length == this.maxTextureUnits) {
-                    renderGroups.push(renderGroup);
-                    renderGroup = { type: undefined, instances: [], data: [], textures: [] };
-                }
-
-                renderGroup.textures.push(object.texture_id);
-                textureIndex = renderGroup.textures.length - 1;
-            }
-
             // Go to next render group when full
             if (renderGroup.instances.length == INSTANCE_BUFFER_SIZE - 1) {
                 renderGroups.push(renderGroup);
@@ -608,6 +595,19 @@ export default class Game {
             ) {
                 renderGroups.push(renderGroup);
                 renderGroup = { type: object.type, instances: [], data: [], textures: [] };
+            }
+
+            // Add texture id to render group textures
+            let textureIndex = renderGroup.textures.indexOf(object.texture_id);
+            if (textureIndex == -1) {
+                // Go to next render group
+                if (renderGroup.textures.length == this.maxTextureUnits) {
+                    renderGroups.push(renderGroup);
+                    renderGroup = { type: undefined, instances: [], data: [], textures: [] };
+                }
+
+                renderGroup.textures.push(object.texture_id);
+                textureIndex = renderGroup.textures.length - 1;
             }
 
             // Add matrix and texture data to render group
