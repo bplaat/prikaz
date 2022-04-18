@@ -44,6 +44,7 @@ class Connection {
         this.game = game;
         this.ws = new WebSocket(url);
         this.ws.binaryType = 'arraybuffer';
+        this.decoder = new TextDecoder();
         this.connected = false;
         this.sendCount = 0;
         this.sendBytes = 0;
@@ -84,6 +85,13 @@ class Connection {
                 for (let i = 0; i < texturesLength; i++) {
                     const texture = {};
                     texture.id = messageView.getUint32(pos, true); pos += 4;
+
+                    const textureName = new Uint8Array(messageView.getUint16(pos, true)); pos += 2;
+                    for (let i = 0; i < textureName.length; i++) {
+                        textureName[i] = messageView.getUint8(pos); pos += 1;
+                    }
+                    texture.name = this.decoder.decode(textureName);
+
                     texture.pixelated = messageView.getUint8(pos); pos += 1;
                     texture.transparent = messageView.getUint8(pos); pos += 1;
                     textures.push(texture);
@@ -113,6 +121,13 @@ class Connection {
                     const object = {};
                     object.id = messageView.getUint32(pos, true); pos += 4;
                     object.type = messageView.getUint8(pos); pos += 1;
+
+                    const objectName = new Uint8Array(messageView.getUint16(pos, true)); pos += 2;
+                    for (let i = 0; i < objectName.length; i++) {
+                        objectName[i] = messageView.getUint8(pos); pos += 1;
+                    }
+                    object.name = this.decoder.decode(objectName);
+
                     object.width = messageView.getFloat32(pos, true); pos += 4;
                     object.height = messageView.getFloat32(pos, true); pos += 4;
                     object.depth = messageView.getFloat32(pos, true); pos += 4;

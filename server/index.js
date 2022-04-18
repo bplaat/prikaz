@@ -38,7 +38,7 @@ const ObjectType = {
     BOX: 3
 };
 
-// World generation
+// Texture and objects
 const textures = [
     { id: 1, name: 'Water', image: 'water.jpg', pixelated: false, transparent: false },
     { id: 2, name: 'Sand', image: 'sand.jpg', pixelated: false, transparent: false },
@@ -77,6 +77,16 @@ const objects = [
     { id: 16, type: ObjectType.PLANE, name: 'Road ground', width: CHUNK_SIZE, height: CHUNK_SIZE, depth: 0, texture_id: 16, texture_repeat_x: CHUNK_SIZE, texture_repeat_y: CHUNK_SIZE }
 ];
 
+// Convert textures and objects string to bytes
+const encoder = new TextEncoder();
+for (const texture of textures) {
+    texture.nameBytes = encoder.encode(texture.name);
+}
+for (const object of objects) {
+    object.nameBytes = encoder.encode(object.name);
+}
+
+// World generation
 const world = {
     chunks: [],
     instances: [],
@@ -204,9 +214,15 @@ wss.on('connection', ws => {
         let responseSize = 0;
         for (const item of responses) {
             if (item.type == MessageType.WORLD_INFO) {
-                responseSize += 1 + 3 + 2 * 3 + 4 + 4 + textures.length * (4 + 1 + 1) +
-                    4 + objects.length * (4 + 1 + 4 * 3 + 4 + 2 * 2);
+                responseSize += 1 + 3 + 2 * 3 + 4 + 4 + 4;
+                for (const texture of textures) {
+                    responseSize += 4 + 2 + texture.nameBytes.length + 1 + 1;
+                }
+                for (const object of objects) {
+                    responseSize += 4 + 1 + 2 + object.nameBytes.length + 4 * 3 + 4 + 2 * 2;
+                }
             }
+
             if (item.type == MessageType.WORLD_CHUNK) {
                 responseSize += 1 + 4 + 4 * 2 + 4 + item.instances.length * (4 + 4 + 4 * 3 * 3);
             }
@@ -232,6 +248,10 @@ wss.on('connection', ws => {
                 responseView.setUint32(pos, textures.length, true); pos += 4;
                 for (const texture of textures) {
                     responseView.setUint32(pos, texture.id, true); pos += 4;
+                    responseView.setUint16(pos, texture.nameBytes.length, true); pos += 2;
+                    for (let i = 0; i < texture.nameBytes.length; i++) {
+                        responseView.setUint8(pos, texture.nameBytes[i]); pos += 1;
+                    }
                     responseView.setUint8(pos, texture.pixelated); pos += 1;
                     responseView.setUint8(pos, texture.transparent); pos += 1;
                 }
@@ -241,6 +261,10 @@ wss.on('connection', ws => {
                 for (const object of objects) {
                     responseView.setUint32(pos, object.id, true); pos += 4;
                     responseView.setUint8(pos, object.type); pos += 1;
+                    responseView.setUint16(pos, object.nameBytes.length, true); pos += 2;
+                    for (let i = 0; i < object.nameBytes.length; i++) {
+                        responseView.setUint8(pos, object.nameBytes[i]); pos += 1;
+                    }
                     responseView.setFloat32(pos, object.width, true); pos += 4;
                     responseView.setFloat32(pos, object.height, true); pos += 4;
                     responseView.setFloat32(pos, object.depth, true); pos += 4;
