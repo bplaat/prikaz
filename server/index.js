@@ -14,10 +14,10 @@ function rand(min, max) {
 // Parse game version
 const packageJson = JSON.parse(fs.readFileSync('package.json'));
 const versionParts = packageJson.version.split('.');
-const VERSION = {
-    MAJOR: parseInt(versionParts[0]),
-    MINOR: parseInt(versionParts[1]),
-    BUGFIX: parseInt(versionParts[2])
+const version = {
+    major: parseInt(versionParts[0]),
+    minor: parseInt(versionParts[1]),
+    bugfix: parseInt(versionParts[2])
 };
 
 // Constants
@@ -214,10 +214,14 @@ wss.on('connection', ws => {
         let responseSize = 0;
         for (const item of responses) {
             if (item.type == MessageType.WORLD_INFO) {
-                responseSize += 1 + 3 + 2 * 3 + 4 + 4 + 4;
+                responseSize += 1 + 3 + 2 * 3 + 4;
+
+                responseSize += 4;
                 for (const texture of textures) {
                     responseSize += 4 + 2 + texture.nameBytes.length + 1 + 1;
                 }
+
+                responseSize += 4;
                 for (const object of objects) {
                     responseSize += 4 + 1 + 2 + object.nameBytes.length + 4 * 3 + 4 + 2 * 2;
                 }
@@ -236,9 +240,9 @@ wss.on('connection', ws => {
             // Send world info response response
             if (item.type == MessageType.WORLD_INFO) {
                 responseView.setUint8(pos, MessageType.WORLD_INFO); pos += 1;
-                responseView.setUint8(pos, VERSION.MAJOR); pos += 1;
-                responseView.setUint8(pos, VERSION.MINOR); pos += 1;
-                responseView.setUint8(pos, VERSION.BUGFIX); pos += 1;
+                responseView.setUint8(pos, version.major); pos += 1;
+                responseView.setUint8(pos, version.minor); pos += 1;
+                responseView.setUint8(pos, version.bugfix); pos += 1;
                 responseView.setUint16(pos, CHUNK_SIZE, true); pos += 2;
                 responseView.setUint16(pos, TICKS_PER_SECOND, true); pos += 2;
                 responseView.setUint16(pos, TICKS_PER_DAY, true); pos += 2;
